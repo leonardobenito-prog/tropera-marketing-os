@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { createBudgetAction, createExpenseAction } from "@/lib/actions/ops";
 import { KPICard, Badge, execState, ProgressBar, money } from "@/components/ui";
 import { requireSession, canSeeAmounts } from "@/lib/permissions";
 
@@ -10,20 +11,24 @@ const EXPENSE_STATUS_TONE: Record<string, "neutral" | "warning" | "success"> = {
 // Filtro por ventana de tiempo vía querystring: /budget?from=2026-09-01&to=2026-09-09
 export default async function BudgetPage({ searchParams }: { searchParams: { from?: string; to?: string } }) {
   const session = await requireSession();
-  const showAmounts = canSeeAmounts(session.user.role); // Viewer ve el resto de la pantalla, pero no los montos (§6)
+  const showAmounts = canSeeAmounts(session.user.role);
 
   const from = searchParams.from ? new Date(searchParams.from) : new Date("2026-06-01");
   const to = searchParams.to ? new Date(searchParams.to) : new Date("2026-10-15");
 
-  const campaigns = await prisma.campaign.findMany({
-    where: { startDate: { lte: to }, endDate: { gte: from } },
-    include: { budgets: true, businessUnit: true },
-  });
-  const expenses = await prisma.expense.findMany({
-    where: { date: { gte: from, lte: to } },
-    include: { businessUnit: true },
-    orderBy: { date: "asc" },
-  });
+  const [campaigns, expenses, businessUnits, vendors] = await Promise.all([
+    prisma.campaign.findMany({
+      where: { startDate: { lte: to }, endDate: { gte: from } },
+      include: { budgets: true, businessUnit: true },
+    }),
+    prisma.expense.findMany({
+      where: { date: { gte: from, lte: to } },
+      include: { businessUnit: true },
+      orderBy: { date: "asc" },
+    }),
+    prisma.businessUnit.findMany({ orderBy: { name: "asc" } }),
+    prisma.vendor.findMany({ orderBy: { name: "asc" } }),
+  ]);
 
   const assigned = campaigns.reduce((a, c) => a + c.budgets.reduce((s, b) => s + b.assignedAmount, 0), 0);
   const actual = expenses.filter((e) => e.status === "PAID").reduce((s, e) => s + e.amount, 0);
@@ -46,6 +51,59 @@ export default async function BudgetPage({ searchParams }: { searchParams: { fro
         al <input type="date" name="to" defaultValue={searchParams.to ?? "2026-10-15"} className="px-2 py-1.5 rounded-md" style={{ border: "1px solid var(--line)" }} />
         <button type="submit" className="px-3 py-1.5 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--ink)" }}>Filtrar</button>
       </form>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
+          <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Crear presupuesto</h2>
+          <form action={createBudgetAction} className="grid gap-3">
+            <select name="businessUnitId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required>
+              <option value="">Unidad</option>
+              {businessUnits.map((unit) => (<option key={unit.id} value={unit.id}>{unit.name}</option>))}
+            </select>
+            <select name="campaignId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }}>
+              <option value="">Campaña (opcional)</option>
+              {campaigns.map((campaign) => (<option key={campaign.id} value={campaign.id}>{campaign.name}</option>))}
+            </select>
+            <input type="number" name="periodYear" placeholder="Año" min={2024} className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
+            <input type="number" name="assignedAmount" placeholder="Monto asignado" min={0} className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
+            <button type="submit" className="px-4 py-2 rounded-md" style={{ background: "var(--c-forest)", color: "#fff" }}>
+              Guardar presupuesto
+            </button>
+          </form>
+        </div>
+
+        <div className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
+          <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Registrar gasto</h2>
+          <form action={createExpenseAction} className="grid gap-3">
+            <select name="businessUnitId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required>
+              <option value="">Unidad</option>
+              {businessUnits.map((unit) => (<option key={unit.id} value={unit.id}>{unit.name}</option>))}
+            </select>
+            <select name="campaignId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }}>
+              <option value="">Campaña (opcional)</option>
+              {campaigns.map((campaign) => (<option key={campaign.id} value={campaign.id}>{campaign.name}</option>))}
+            </select>
+            <input name="category" placeholder="Categoría" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
+            <div className="grid gap-3 md:grid-cols-2">
+              <input type="number" name="amount" placeholder="Monto" min={1} className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
+              <input type="date" name="date" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
+            </div>
+            <select name="status" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} defaultValue="PLANNED">
+              <option value="PLANNED">Planificado</option>
+              <option value="COMMITTED">Comprometido</option>
+              <option value="PAID">Pagado</option>
+            </select>
+            <select name="vendorId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }}>
+              <option value="">Proveedor (opcional)</option>
+              {vendors.map((vendor) => (<option key={vendor.id} value={vendor.id}>{vendor.name}</option>))}
+            </select>
+            <textarea name="notes" placeholder="Notas" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} rows={2} />
+            <button type="submit" className="px-4 py-2 rounded-md" style={{ background: "var(--c-forest)", color: "#fff" }}>
+              Guardar gasto
+            </button>
+          </form>
+        </div>
+      </div>
 
       <div className="flex gap-3 flex-wrap">
         <KPICard label="ASIGNADO" value={fmt(assigned)} accent="var(--c-forest)" />

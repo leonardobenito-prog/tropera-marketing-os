@@ -1,21 +1,25 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { createTaskAction, createProductionProjectAction } from "@/lib/actions/ops";
 import { KPICard, money, execState, ProgressBar } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function CampaignDetailPage({ params }: { params: { code: string } }) {
-  const campaign = await prisma.campaign.findUnique({
-    where: { campaignCode: params.code },
-    include: {
-      businessUnit: true,
-      budgets: true,
-      expenses: true,
-      tasks: { include: { assignee: true } },
-      productionProjects: true,
-      learnings: true,
-    },
-  });
+  const [campaign, users] = await Promise.all([
+    prisma.campaign.findUnique({
+      where: { campaignCode: params.code },
+      include: {
+        businessUnit: true,
+        budgets: true,
+        expenses: true,
+        tasks: { include: { assignee: true } },
+        productionProjects: true,
+        learnings: true,
+      },
+    }),
+    prisma.user.findMany({ orderBy: { name: "asc" } }),
+  ]);
 
   if (!campaign) notFound();
 
@@ -44,6 +48,65 @@ export default async function CampaignDetailPage({ params }: { params: { code: s
           <KPICard label="DISPONIBLE" value={money(available)} accent="var(--c-success)" />
         </div>
         <ProgressBar pct={ex.pct} color={ex.color} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
+          <h3 className="text-base heading-title mb-3" style={{ color: "var(--ink)" }}>Agregar tarea</h3>
+          <form action={createTaskAction} className="grid gap-3">
+            <input type="hidden" name="campaignId" value={campaign.id} />
+            <input name="title" placeholder="Título de la tarea" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
+            <input name="type" placeholder="Tipo" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} />
+            <select name="assigneeId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }}>
+              <option value="">Sin asignar</option>
+              {users.map((user) => (<option key={user.id} value={user.id}>{user.name}</option>))}
+            </select>
+            <div className="grid gap-3 md:grid-cols-2">
+              <input type="date" name="dueDate" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} />
+              <input type="number" name="cost" placeholder="Costo" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <select name="priority" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} defaultValue="MEDIUM">
+                <option value="LOW">Baja</option>
+                <option value="MEDIUM">Media</option>
+                <option value="HIGH">Alta</option>
+              </select>
+              <select name="status" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} defaultValue="TODO">
+                <option value="TODO">Por hacer</option>
+                <option value="IN_PROGRESS">En progreso</option>
+                <option value="REVIEW">Revisión</option>
+                <option value="DONE">Hecho</option>
+              </select>
+            </div>
+            <button type="submit" className="px-4 py-2 rounded-md" style={{ background: "var(--c-forest)", color: "#fff" }}>
+              Guardar tarea
+            </button>
+          </form>
+        </div>
+
+        <div className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
+          <h3 className="text-base heading-title mb-3" style={{ color: "var(--ink)" }}>Nuevo proyecto de producción</h3>
+          <form action={createProductionProjectAction} className="grid gap-3">
+            <input type="hidden" name="campaignId" value={campaign.id} />
+            <input name="name" placeholder="Nombre del proyecto" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
+            <select name="purpose" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} defaultValue="CAMPAIGN">
+              <option value="CAMPAIGN">Campaña</option>
+              <option value="EVERGREEN">Evergreen</option>
+              <option value="BRAND">Marca</option>
+            </select>
+            <select name="status" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} defaultValue="BACKLOG">
+              <option value="BACKLOG">Backlog</option>
+              <option value="IN_PRODUCTION">En producción</option>
+              <option value="REVIEW">Revisión</option>
+              <option value="APPROVED">Aprobado</option>
+              <option value="PUBLISHED">Publicado</option>
+              <option value="IMPLEMENTED">Implementado</option>
+            </select>
+            <button type="submit" className="px-4 py-2 rounded-md" style={{ background: "var(--c-forest)", color: "#fff" }}>
+              Crear proyecto
+            </button>
+          </form>
+        </div>
       </div>
 
       <div>
