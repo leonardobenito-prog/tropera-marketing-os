@@ -1,0 +1,519 @@
+// Tropera Marketing OS — schema de base de datos
+// Mapea 1:1 las entidades y relaciones descritas en el documento de
+// arquitectura (secciones 3-13). Los nombres de campo coinciden con los
+// del prototipo (tropera-marketing-os.jsx) para que la migración de UI
+// sea directa.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// ORGANIZACIÓN
+// ---------------------------------------------------------------------------
+
+model Region {
+  id            String        @id @default(cuid())
+  name          String        @unique
+  code          String        @unique
+  businessUnits BusinessUnit[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+enum BusinessUnitType {
+  RESTAURANT
+  BREWERY
+  ECOMMERCE
+  CORPORATE
+}
+
+model BusinessUnit {
+  id         String           @id @default(cuid())
+  name       String
+  type       BusinessUnitType
+  region     Region?          @relation(fields: [regionId], references: [id])
+  regionId   String?
+  status     String           @default("ACTIVE")
+  locations  Location[]
+  campaigns  Campaign[]
+  budgets    Budget[]
+  expenses   Expense[]
+  ideas      Idea[]
+  adAccounts AdAccount[]
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+}
+
+enum LocationType {
+  FLAGSHIP
+  PRODUCTION_PLANT
+  TAPROOM
+  WAREHOUSE
+}
+
+model Location {
+  id             String            @id @default(cuid())
+  name           String
+  address        String?
+  lat            Float?
+  lng            Float?
+  type           LocationType      @default(FLAGSHIP)
+  businessUnit   BusinessUnit?     @relation(fields: [businessUnitId], references: [id])
+  businessUnitId String?
+  spaces         AdvertisingSpace[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+}
+
+// Tabla en vez de enum — así se agregan tipos de espacio sin migración (§10, §17).
+model AdvertisingSpaceType {
+  id     String             @id @default(cuid())
+  name   String             @unique
+  spaces AdvertisingSpace[]
+}
+
+enum SpaceStatus {
+  AVAILABLE
+  IN_USE
+  RESERVED
+  MAINTENANCE
+}
+
+model AdvertisingSpace {
+  id             String               @id @default(cuid())
+  name           String
+  location       Location             @relation(fields: [locationId], references: [id])
+  locationId     String
+  type           AdvertisingSpaceType @relation(fields: [typeId], references: [id])
+  typeId         String
+  dimensions     String?
+  photoUrl       String?
+  status         SpaceStatus          @default(AVAILABLE)
+  estimatedCost  Int?
+  placements     PhysicalAdPlacement[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// USUARIOS Y ROLES — dos sistemas de rol separados (ver §6 de la arquitectura)
+// ---------------------------------------------------------------------------
+
+enum SystemRole {
+  ADMIN
+  MARKETING_MANAGER
+  TEAM_MEMBER
+  VIEWER
+}
+
+model FunctionalRole {
+  id    String @id @default(cuid())
+  name  String @unique // Video, Fotografía, Diseño, Copy, Edición, Paid Media, Community, Instalación, Ecommerce, Aprobación
+  users User[]
+}
+
+model User {
+  id              String            @id @default(cuid())
+  name            String
+  email           String            @unique
+  passwordHash    String?
+  systemRole      SystemRole        @default(TEAM_MEMBER)
+  functionalRoles FunctionalRole[]
+  ownedCampaigns  Campaign[]        @relation("CampaignOwner")
+  assignedTasks   Task[]
+  ideas           Idea[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// CAMPAÑA — entidad central del sistema (§7)
+// ---------------------------------------------------------------------------
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+model Campaign {
+  id             String            @id @default(cuid())
+  campaignCode   String            @unique // TRP-{YYYY}-{NNNN}, inmutable — ver §7
+  name           String
+  businessUnit   BusinessUnit      @relation(fields: [businessUnitId], references: [id])
+  businessUnitId String
+  objective      String?
+  status         CampaignStatus    @default(DRAFT)
+  startDate      DateTime
+  endDate        DateTime
+  owner          User?             @relation("CampaignOwner", fields: [ownerId], references: [id])
+  ownerId        String?
+
+  productionProjects ProductionProject[]
+  tasks              Task[]
+  digitalAdCampaigns DigitalAdCampaign[]
+  physicalPlacements PhysicalAdPlacement[]
+  budgets            Budget[]
+  expenses           Expense[]
+  metrics            Metric[]
+  learnings          Learning[]
+  orders             Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessUnitId])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// PRODUCCIÓN (§9)
+// ---------------------------------------------------------------------------
+
+enum ProductionPurpose {
+  CAMPAIGN
+  EVERGREEN
+  BRAND
+}
+
+enum ProductionStatus {
+  BACKLOG
+  IN_PRODUCTION
+  REVIEW
+  APPROVED
+  PUBLISHED
+  IMPLEMENTED
+}
+
+model ProductionProject {
+  id         String            @id @default(cuid())
+  campaign   Campaign?         @relation(fields: [campaignId], references: [id])
+  campaignId String?
+  name       String
+  purpose    ProductionPurpose @default(CAMPAIGN)
+  status     ProductionStatus  @default(BACKLOG)
+  tasks      Task[]
+  assets     Asset[]
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  DONE
+}
+
+model Task {
+  id                  String             @id @default(cuid())
+  productionProject   ProductionProject? @relation(fields: [productionProjectId], references: [id])
+  productionProjectId String?
+  campaign            Campaign?          @relation(fields: [campaignId], references: [id])
+  campaignId          String?
+  title               String
+  type                String?
+  assignee            User?              @relation(fields: [assigneeId], references: [id])
+  assigneeId          String?
+  dueDate             DateTime?
+  priority            TaskPriority       @default(MEDIUM)
+  status              TaskStatus         @default(TODO)
+  dependsOn           Task?              @relation("TaskDependency", fields: [dependsOnId], references: [id])
+  dependsOnId         String?
+  dependents          Task[]             @relation("TaskDependency")
+  cost                Int?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@index([assigneeId])
+  @@index([campaignId])
+}
+
+model Asset {
+  id                  String            @id @default(cuid())
+  productionProject   ProductionProject @relation(fields: [productionProjectId], references: [id])
+  productionProjectId String
+  type                String // VIDEO | PHOTO | DESIGN | COPY
+  fileUrl             String?
+  status              String  @default("DRAFT")
+  version             Int     @default(1)
+  createdAt           DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// PUBLICIDAD DIGITAL (§18-19 del brief, §10-11 de la arquitectura)
+// ---------------------------------------------------------------------------
+
+// Tabla, no enum — se agregan plataformas nuevas sin migración.
+model AdvertisingPlatform {
+  id        String      @id @default(cuid())
+  name      String      @unique // META, GOOGLE, MAILING, ...
+  accounts  AdAccount[]
+}
+
+model AdAccount {
+  id                 String              @id @default(cuid())
+  platform           AdvertisingPlatform @relation(fields: [platformId], references: [id])
+  platformId         String
+  businessUnit       BusinessUnit        @relation(fields: [businessUnitId], references: [id])
+  businessUnitId     String
+  externalAccountId  String
+
+  // Credenciales OAuth — en producción real, cifrar antes de guardar
+  // (ej. con una librería como @47ng/cloak) en vez de texto plano.
+  accessToken        String?
+  refreshToken       String?
+  tokenExpiresAt     DateTime?
+  connectedAt        DateTime?
+  connectedByUserId  String?
+
+  digitalAdCampaigns DigitalAdCampaign[]
+}
+
+model DigitalAdCampaign {
+  id                   String    @id @default(cuid())
+  campaign             Campaign  @relation(fields: [campaignId], references: [id])
+  campaignId           String
+  adAccount            AdAccount @relation(fields: [adAccountId], references: [id])
+  adAccountId          String
+  externalCampaignId   String
+  externalCampaignName String?
+  metricsRaw           AdMetricRaw[]
+
+  @@index([campaignId])
+}
+
+// RAW — payload crudo tal como llega de cada API. Nunca se edita, solo se inserta (§11).
+model AdMetricRaw {
+  id                  String            @id @default(cuid())
+  digitalAdCampaign   DigitalAdCampaign @relation(fields: [digitalAdCampaignId], references: [id])
+  digitalAdCampaignId String
+  date                DateTime
+  payload             Json
+  ingestedAt          DateTime          @default(now())
+}
+
+// PROCESSED — normalizada, es la que consultan dashboards y reportes (§11).
+model Metric {
+  id          String   @id @default(cuid())
+  campaign    Campaign @relation(fields: [campaignId], references: [id])
+  campaignId  String
+  platform    String
+  date        DateTime
+  spend       Int      @default(0)
+  impressions Int      @default(0)
+  clicks      Int      @default(0)
+  conversions Int      @default(0)
+  revenue     Int      @default(0)
+
+  @@index([campaignId, date])
+}
+
+// ---------------------------------------------------------------------------
+// PUBLICIDAD FÍSICA (§25-26)
+// ---------------------------------------------------------------------------
+
+model PhysicalAdPlacement {
+  id                 String           @id @default(cuid())
+  campaign           Campaign         @relation(fields: [campaignId], references: [id])
+  campaignId         String
+  advertisingSpace   AdvertisingSpace @relation(fields: [advertisingSpaceId], references: [id])
+  advertisingSpaceId String
+  installDate        DateTime?
+  removalDate        DateTime?
+  cost               Int?
+  status             String   @default("PLANNED")
+  photoUrl           String?
+}
+
+// ---------------------------------------------------------------------------
+// PRESUPUESTO (§13-15) — Available NUNCA se guarda, se calcula (ver §0 y §8
+// del documento de arquitectura). Actual/Committed viven en Expense.status.
+// ---------------------------------------------------------------------------
+
+model Budget {
+  id             String        @id @default(cuid())
+  businessUnit   BusinessUnit  @relation(fields: [businessUnitId], references: [id])
+  businessUnitId String
+  campaign       Campaign?     @relation(fields: [campaignId], references: [id])
+  campaignId     String?
+  periodYear     Int
+  periodMonth    Int?
+  assignedAmount Int
+  expenses       Expense[]
+  createdAt      DateTime      @default(now())
+
+  @@index([businessUnitId, periodYear])
+}
+
+enum ExpenseStatus {
+  PLANNED
+  COMMITTED
+  PAID
+}
+
+model Expense {
+  id             String        @id @default(cuid())
+  campaign       Campaign?     @relation(fields: [campaignId], references: [id])
+  campaignId     String?
+  businessUnit   BusinessUnit  @relation(fields: [businessUnitId], references: [id])
+  businessUnitId String
+  budget         Budget?       @relation(fields: [budgetId], references: [id])
+  budgetId       String?
+  amount         Int
+  category       String
+  vendor         Vendor?       @relation(fields: [vendorId], references: [id])
+  vendorId       String?
+  status         ExpenseStatus @default(PLANNED)
+  date           DateTime
+  receiptUrl     String?
+  notes          String?
+  createdAt      DateTime      @default(now())
+
+  @@index([campaignId])
+  @@index([date])
+}
+
+model Vendor {
+  id       String    @id @default(cuid())
+  name     String
+  type     String?
+  contact  String?
+  rating   Int?
+  notes    String?
+  expenses Expense[]
+}
+
+// ---------------------------------------------------------------------------
+// IDEAS (§27)
+// ---------------------------------------------------------------------------
+
+enum IdeaStatus {
+  IDEA
+  EVALUATION
+  BUDGETING
+  APPROVED
+  PRODUCTION
+  IMPLEMENTED
+  REJECTED
+  ARCHIVED
+}
+
+model Idea {
+  id             String       @id @default(cuid())
+  title          String
+  businessUnit   BusinessUnit @relation(fields: [businessUnitId], references: [id])
+  businessUnitId String
+  objective      String?
+  type           String?
+  estimatedCost  Int?
+  impact         String?
+  priority       String?
+  owner          User?        @relation(fields: [ownerId], references: [id])
+  ownerId        String?
+  status         IdeaStatus   @default(IDEA)
+  createdAt      DateTime     @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// E-COMMERCE (§21-24)
+// ---------------------------------------------------------------------------
+
+model Product {
+  id         String      @id @default(cuid())
+  sku        String      @unique
+  name       String
+  category   String?
+  price      Int
+  cost       Int?
+  stock      Int         @default(0)
+  status     String      @default("ACTIVE")
+  imageUrl   String?
+  orderItems OrderItem[]
+}
+
+model Customer {
+  id     String  @id @default(cuid())
+  email  String  @unique
+  name   String?
+  orders Order[]
+}
+
+model Order {
+  id           String      @id @default(cuid())
+  customer     Customer    @relation(fields: [customerId], references: [id])
+  customerId   String
+  date         DateTime
+  revenue      Int
+  discount     Int         @default(0)
+  campaign     Campaign?   @relation(fields: [campaignId], references: [id])
+  campaignId   String? // resuelto vía utmCampaign = campaignCode (§7, §12)
+  utmSource    String?
+  utmMedium    String?
+  utmCampaign  String?
+  utmContent   String?
+  utmTerm      String?
+  items        OrderItem[]
+
+  @@index([campaignId])
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  order     Order   @relation(fields: [orderId], references: [id])
+  orderId   String
+  product   Product @relation(fields: [productId], references: [id])
+  productId String
+  quantity  Int
+  unitPrice Int
+}
+
+// ---------------------------------------------------------------------------
+// REPORTES Y APRENDIZAJES (§30, §10)
+// ---------------------------------------------------------------------------
+
+model Learning {
+  id          String   @id @default(cuid())
+  campaign    Campaign @relation(fields: [campaignId], references: [id])
+  campaignId  String
+  whatWorked  String?
+  whatFailed  String?
+  whatToRepeat String?
+  whatToChange String?
+  createdAt   DateTime @default(now())
+}
+
+model Report {
+  id           String   @id @default(cuid())
+  scope        String // CAMPAIGN | LOCATION | REGION | CHANNEL | MONTH | YEAR
+  filters      Json?
+  generatedAt  DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// INTEGRACIONES (§13/§31) — alimenta la pantalla Data Health en Settings.
+// ---------------------------------------------------------------------------
+
+model IntegrationLog {
+  id               String    @id @default(cuid())
+  platform         String
+  syncStartedAt    DateTime?
+  syncFinishedAt   DateTime?
+  status           String    @default("PENDING") // CONNECTED | PENDING | ERROR
+  recordsProcessed Int       @default(0)
+  errorMessage     String?
+}
