@@ -186,6 +186,13 @@ export default async function CalendarPage({ searchParams }: { searchParams: { m
                     </div>
                     <form action={updateTaskAction} className="mt-2 grid gap-2">
                       <input type="hidden" name="id" value={task.id} />
+                      <input
+                        type="date"
+                        name="dueDate"
+                        defaultValue={task.dueDate ? new Date(task.dueDate).toISOString().slice(0, 10) : ""}
+                        className="px-2 py-1 rounded-md text-xs"
+                        style={{ border: "1px solid var(--line)" }}
+                      />
                       <select name="status" defaultValue={task.status} className="px-2 py-1 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
                         <option value="TODO">Por hacer</option>
                         <option value="IN_PROGRESS">En progreso</option>

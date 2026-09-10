@@ -524,7 +524,13 @@ export async function deleteTaskAction(formData: FormData) {
   revalidatePath("/today");
   revalidatePath("/calendar");
   revalidatePath("/campaigns");
-  redirect(`/campaigns/${task.campaignId ? (await prisma.campaign.findUnique({ where: { id: task.campaignId } }))?.campaignCode ?? "campaigns" : "campaigns"}?success=task-deleted`);
+
+  if (task.campaignId) {
+    const campaign = await prisma.campaign.findUnique({ where: { id: task.campaignId } });
+    redirect(`/campaigns/${campaign?.campaignCode ?? "campaigns"}?success=task-deleted`);
+  }
+
+  redirect("/calendar?success=task-deleted");
 }
 
 export async function createProductionProjectAction(formData: FormData) {
