@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { createTeamMemberAction } from "@/lib/actions/ops";
+import { createTeamMemberAction, deleteTeamMemberAction } from "@/lib/actions/ops";
 import { Badge, KPICard } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -95,9 +95,15 @@ export default async function TeamPage() {
                 <div className="text-sm font-medium" style={{ color: "var(--ink)" }}>{user.name}</div>
                 <div className="text-xs mt-1" style={{ color: "var(--muted)" }}>{user.email}</div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Badge tone={user.systemRole === "ADMIN" ? "success" : "neutral"}>{ROLE_LABEL[user.systemRole] ?? user.systemRole}</Badge>
                 <span className="text-xs" style={{ color: "var(--muted)" }}>{user.functionalRoles.map((role) => role.name).join(", ") || "Sin roles funcionales"}</span>
+                <form action={deleteTeamMemberAction} className="ml-auto">
+                  <input type="hidden" name="id" value={user.id} />
+                  <button type="submit" className="px-2.5 py-1.5 rounded-md text-xs font-medium" style={{ background: "#FDECEC", color: "#9f1239", border: "1px solid #FBC2C2" }}>
+                    Eliminar
+                  </button>
+                </form>
               </div>
             </div>
 

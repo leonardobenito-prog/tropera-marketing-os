@@ -130,6 +130,45 @@ export async function createTeamMemberAction(formData: FormData) {
   redirect("/team?success=member-created");
 }
 
+export async function deleteTeamMemberAction(formData: FormData) {
+  await requireRole(["ADMIN", "MARKETING_MANAGER"]);
+
+  const id = String(formData.get("id") ?? "");
+  if (!id) {
+    redirect("/team?error=member-not-found");
+  }
+
+  const member = await prisma.user.findUnique({
+    where: { id },
+    include: { functionalRoles: true, assignedTasks: true, ownedCampaigns: true, ideas: true },
+  });
+
+  if (!member) {
+    redirect("/team?error=member-not-found");
+  }
+
+  const adminCount = await prisma.user.count({ where: { systemRole: "ADMIN" } });
+  if (member.systemRole === "ADMIN" && adminCount <= 1) {
+    redirect("/team?error=admin-protected");
+  }
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id },
+      data: {
+        functionalRoles: { set: [] },
+      },
+    }),
+    prisma.task.updateMany({ where: { assigneeId: id }, data: { assigneeId: null } }),
+    prisma.campaign.updateMany({ where: { ownerId: id }, data: { ownerId: null } }),
+    prisma.idea.updateMany({ where: { ownerId: id }, data: { ownerId: null } }),
+    prisma.user.delete({ where: { id } }),
+  ]);
+
+  revalidatePath("/team");
+  redirect("/team?success=member-deleted");
+}
+
 export async function updateMyPasswordAction(formData: FormData) {
   const session = await requireSession();
 

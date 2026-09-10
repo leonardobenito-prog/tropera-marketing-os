@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/permissions";
 import { Badge, KPICard } from "@/components/ui";
+import { AssigneeFilter } from "@/components/AssigneeFilter";
 
 export const dynamic = "force-dynamic";
 
@@ -81,25 +82,7 @@ export default async function TodayPage({
           <label className="block text-[11px] uppercase mb-2" style={{ color: "var(--muted)" }}>
             Filtrar por persona
           </label>
-          <form method="get">
-            <select
-              name="assignee"
-              defaultValue={selectedAssigneeId}
-              onChange={(event) => {
-                const form = event.currentTarget.form;
-                if (form) form.submit();
-              }}
-              className="w-full px-3 py-2 rounded-md"
-              style={{ border: "1px solid var(--line)", background: "#fff" }}
-            >
-              <option value="all">Todos los miembros</option>
-              {users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name}
-                </option>
-              ))}
-            </select>
-          </form>
+          <AssigneeFilter users={users} selectedAssigneeId={selectedAssigneeId} />
         </div>
       </div>
 
