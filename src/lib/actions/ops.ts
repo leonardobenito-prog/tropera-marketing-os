@@ -480,9 +480,9 @@ export async function updateTaskAction(formData: FormData) {
   if (!task) redirect("/calendar?error=task-not-found");
 
   const payload = taskSchema.parse({
-    title: formData.get("title"),
-    type: formData.get("type") ?? "",
-    assigneeId: formData.get("assigneeId") ?? "",
+    title: formData.get("title") ?? task.title,
+    type: formData.get("type") ?? task.type ?? "",
+    assigneeId: formData.get("assigneeId") ?? task.assigneeId ?? "",
     campaignId: formData.get("campaignId") ?? task.campaignId ?? "",
     productionProjectId: formData.get("productionProjectId") ?? task.productionProjectId ?? "",
     dueDate: formData.get("dueDate") ?? (task.dueDate ? task.dueDate.toISOString().slice(0, 10) : ""),
