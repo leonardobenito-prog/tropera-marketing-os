@@ -32,6 +32,7 @@ export default async function CampaignsPage() {
       <div className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
         <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Crear campaña</h2>
         <form action={createCampaignAction} className="grid gap-3 md:grid-cols-2">
+          <input type="hidden" name="redirectTo" value="/campaigns" />
           <input name="name" placeholder="Nombre" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
           <input name="campaignCode" placeholder="Código (TRP-2026-0001)" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
           <select name="businessUnitId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required>
@@ -103,6 +104,7 @@ export default async function CampaignsPage() {
               <form action={updateCampaignAction} className="mt-3 grid gap-2 md:grid-cols-3" style={{ borderTop: "1px solid var(--line)", paddingTop: "0.75rem" }}>
                 <input type="hidden" name="id" value={c.id} />
                 <input type="hidden" name="campaignCode" value={c.campaignCode} />
+                <input type="hidden" name="redirectTo" value="/campaigns" />
                 <input name="name" defaultValue={c.name} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
                 <select name="businessUnitId" defaultValue={c.businessUnitId} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
                   {businessUnits.map((unit) => (<option key={unit.id} value={unit.id}>{unit.name}</option>))}

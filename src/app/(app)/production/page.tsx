@@ -74,6 +74,7 @@ export default async function ProductionPage() {
       <div className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
         <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Crear proyecto</h2>
         <form action={createProductionProjectAction} className="grid gap-3 md:grid-cols-3">
+          <input type="hidden" name="redirectTo" value="/production" />
           <input name="name" placeholder="Nombre del proyecto" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
           <select name="campaignId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }}>
             <option value="">Sin campaña</option>
@@ -166,12 +167,14 @@ export default async function ProductionPage() {
                 <div className="text-[11px] uppercase" style={{ color: "var(--muted)" }}>Editar proyecto</div>
                 <form action={deleteProductionProjectAction} className="inline-block">
                   <input type="hidden" name="id" value={project.id} />
+                  <input type="hidden" name="redirectTo" value="/production" />
                   <button type="submit" className="text-[11px] px-2 py-1 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--c-danger)" }}>Eliminar</button>
                 </form>
               </div>
 
               <form action={updateProductionProjectAction} className="mt-3 grid gap-2 md:grid-cols-4">
                 <input type="hidden" name="id" value={project.id} />
+                <input type="hidden" name="redirectTo" value="/production" />
                 <input name="name" defaultValue={project.name} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
                 <select name="campaignId" defaultValue={project.campaignId ?? ""} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
                   <option value="">Sin campaña</option>

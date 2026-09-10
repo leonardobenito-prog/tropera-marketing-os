@@ -7,6 +7,10 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireRole, requireSession } from "@/lib/permissions";
 
+function withParam(path: string, key: string, value: string) {
+  return `${path}${path.includes("?") ? "&" : "?"}${key}=${value}`;
+}
+
 const campaignSchema = z.object({
   name: z.string().min(2, "El nombre debe tener al menos 2 caracteres."),
   campaignCode: z.string().min(2, "El código es obligatorio."),
@@ -317,6 +321,8 @@ export async function deletePhysicalPlacementAction(formData: FormData) {
 export async function createCampaignAction(formData: FormData) {
   await requireRole(["ADMIN", "MARKETING_MANAGER"]);
 
+  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
+
   const payload = campaignSchema.parse({
     name: formData.get("name"),
     campaignCode: formData.get("campaignCode"),
@@ -343,11 +349,13 @@ export async function createCampaignAction(formData: FormData) {
 
   revalidatePath("/campaigns");
   revalidatePath(`/campaigns/${campaign.campaignCode}`);
-  redirect(`/campaigns/${campaign.campaignCode}?success=campaign-created`);
+  redirect(withParam(redirectTo || `/campaigns/${campaign.campaignCode}`, "success", "campaign-created"));
 }
 
 export async function updateCampaignAction(formData: FormData) {
   await requireRole(["ADMIN", "MARKETING_MANAGER"]);
+
+  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
 
   const payload = campaignSchema.parse({
     name: formData.get("name"),
@@ -362,7 +370,7 @@ export async function updateCampaignAction(formData: FormData) {
 
   const id = String(formData.get("id"));
   const current = await prisma.campaign.findUnique({ where: { id } });
-  if (!current) redirect("/campaigns?error=campaign-not-found");
+  if (!current) redirect(withParam(redirectTo || "/campaigns", "error", "campaign-not-found"));
 
   const updated = await prisma.campaign.update({
     where: { id },
@@ -380,7 +388,7 @@ export async function updateCampaignAction(formData: FormData) {
 
   revalidatePath("/campaigns");
   revalidatePath(`/campaigns/${updated.campaignCode}`);
-  redirect(`/campaigns/${updated.campaignCode}?success=campaign-updated`);
+  redirect(withParam(redirectTo || `/campaigns/${updated.campaignCode}`, "success", "campaign-updated"));
 }
 
 export async function updateCampaignStatusAction(formData: FormData) {
@@ -433,6 +441,8 @@ export async function deleteCampaignAction(formData: FormData) {
 export async function createTaskAction(formData: FormData) {
   await requireRole(["ADMIN", "MARKETING_MANAGER", "TEAM_MEMBER"]);
 
+  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
+
   const payload = taskSchema.parse({
     title: formData.get("title"),
     type: formData.get("type") ?? "",
@@ -463,21 +473,24 @@ export async function createTaskAction(formData: FormData) {
   revalidatePath("/calendar");
   revalidatePath("/campaigns");
 
+  let fallback = "/calendar";
   if (task.campaignId) {
     const campaign = await prisma.campaign.findUnique({ where: { id: task.campaignId } });
     revalidatePath(`/campaigns/${campaign?.campaignCode ?? ""}`);
-    redirect(`/campaigns/${campaign?.campaignCode ?? "campaigns"}?success=task-created`);
+    fallback = `/campaigns/${campaign?.campaignCode ?? "campaigns"}`;
   }
 
-  redirect("/calendar?success=task-created");
+  redirect(withParam(redirectTo || fallback, "success", "task-created"));
 }
 
 export async function updateTaskAction(formData: FormData) {
   await requireRole(["ADMIN", "MARKETING_MANAGER", "TEAM_MEMBER"]);
 
+  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
+
   const id = String(formData.get("id"));
   const task = await prisma.task.findUnique({ where: { id } });
-  if (!task) redirect("/calendar?error=task-not-found");
+  if (!task) redirect(withParam(redirectTo || "/calendar", "error", "task-not-found"));
 
   const payload = taskSchema.parse({
     title: formData.get("title") ?? task.title,
@@ -509,32 +522,44 @@ export async function updateTaskAction(formData: FormData) {
   revalidatePath("/today");
   revalidatePath("/calendar");
   revalidatePath("/campaigns");
-  revalidatePath(`/campaigns/${updated.campaignId ? (await prisma.campaign.findUnique({ where: { id: updated.campaignId } }))?.campaignCode ?? "campaigns" : "campaigns"}`);
-  redirect(updated.campaignId ? `/campaigns/${(await prisma.campaign.findUnique({ where: { id: updated.campaignId } }))?.campaignCode ?? "campaigns"}?success=task-updated` : "/calendar?success=task-updated");
+
+  let fallback = "/calendar";
+  if (updated.campaignId) {
+    const campaign = await prisma.campaign.findUnique({ where: { id: updated.campaignId } });
+    revalidatePath(`/campaigns/${campaign?.campaignCode ?? ""}`);
+    fallback = `/campaigns/${campaign?.campaignCode ?? "campaigns"}`;
+  }
+
+  redirect(withParam(redirectTo || fallback, "success", "task-updated"));
 }
 
 export async function deleteTaskAction(formData: FormData) {
   await requireRole(["ADMIN", "MARKETING_MANAGER", "TEAM_MEMBER"]);
 
+  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
+
   const id = String(formData.get("id"));
   const task = await prisma.task.findUnique({ where: { id } });
-  if (!task) redirect("/campaigns?error=task-not-found");
+  if (!task) redirect(withParam(redirectTo || "/calendar", "error", "task-not-found"));
 
   await prisma.task.delete({ where: { id } });
   revalidatePath("/today");
   revalidatePath("/calendar");
   revalidatePath("/campaigns");
 
+  let fallback = "/calendar";
   if (task.campaignId) {
     const campaign = await prisma.campaign.findUnique({ where: { id: task.campaignId } });
-    redirect(`/campaigns/${campaign?.campaignCode ?? "campaigns"}?success=task-deleted`);
+    fallback = `/campaigns/${campaign?.campaignCode ?? "campaigns"}`;
   }
 
-  redirect("/calendar?success=task-deleted");
+  redirect(withParam(redirectTo || fallback, "success", "task-deleted"));
 }
 
 export async function createProductionProjectAction(formData: FormData) {
   await requireRole(["ADMIN", "MARKETING_MANAGER", "TEAM_MEMBER"]);
+
+  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
 
   const payload = projectSchema.parse({
     name: formData.get("name"),
@@ -554,15 +579,24 @@ export async function createProductionProjectAction(formData: FormData) {
 
   revalidatePath("/production");
   revalidatePath("/campaigns");
-  redirect(`/campaigns/${project.campaignId ? (await prisma.campaign.findUnique({ where: { id: project.campaignId } }))?.campaignCode ?? "campaigns" : "campaigns"}?success=project-created`);
+
+  let fallback = "/production";
+  if (project.campaignId) {
+    const campaign = await prisma.campaign.findUnique({ where: { id: project.campaignId } });
+    fallback = `/campaigns/${campaign?.campaignCode ?? "campaigns"}`;
+  }
+
+  redirect(withParam(redirectTo || fallback, "success", "project-created"));
 }
 
 export async function updateProductionProjectAction(formData: FormData) {
   await requireRole(["ADMIN", "MARKETING_MANAGER", "TEAM_MEMBER"]);
 
+  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
+
   const id = String(formData.get("id"));
   const current = await prisma.productionProject.findUnique({ where: { id } });
-  if (!current) redirect("/production?error=project-not-found");
+  if (!current) redirect(withParam(redirectTo || "/production", "error", "project-not-found"));
 
   const payload = projectSchema.parse({
     name: formData.get("name"),
@@ -583,15 +617,24 @@ export async function updateProductionProjectAction(formData: FormData) {
 
   revalidatePath("/production");
   revalidatePath("/campaigns");
-  redirect(updated.campaignId ? `/campaigns/${(await prisma.campaign.findUnique({ where: { id: updated.campaignId } }))?.campaignCode ?? "campaigns"}?success=project-updated` : "/production?success=project-updated");
+
+  let fallback = "/production";
+  if (updated.campaignId) {
+    const campaign = await prisma.campaign.findUnique({ where: { id: updated.campaignId } });
+    fallback = `/campaigns/${campaign?.campaignCode ?? "campaigns"}`;
+  }
+
+  redirect(withParam(redirectTo || fallback, "success", "project-updated"));
 }
 
 export async function deleteProductionProjectAction(formData: FormData) {
   await requireRole(["ADMIN", "MARKETING_MANAGER"]);
 
+  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
+
   const id = String(formData.get("id"));
   const project = await prisma.productionProject.findUnique({ where: { id }, include: { tasks: true, assets: true } });
-  if (!project) redirect("/production?error=project-not-found");
+  if (!project) redirect(withParam(redirectTo || "/production", "error", "project-not-found"));
 
   await prisma.$transaction([
     prisma.asset.deleteMany({ where: { productionProjectId: id } }),
@@ -600,11 +643,20 @@ export async function deleteProductionProjectAction(formData: FormData) {
   ]);
 
   revalidatePath("/production");
-  redirect(`/campaigns/${project.campaignId ? (await prisma.campaign.findUnique({ where: { id: project.campaignId } }))?.campaignCode ?? "campaigns" : "campaigns"}?success=project-deleted`);
+
+  let fallback = "/production";
+  if (project.campaignId) {
+    const campaign = await prisma.campaign.findUnique({ where: { id: project.campaignId } });
+    fallback = `/campaigns/${campaign?.campaignCode ?? "campaigns"}`;
+  }
+
+  redirect(withParam(redirectTo || fallback, "success", "project-deleted"));
 }
 
 export async function createBudgetAction(formData: FormData) {
   await requireRole(["ADMIN", "MARKETING_MANAGER"]);
+
+  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
 
   const payload = budgetSchema.parse({
     businessUnitId: formData.get("businessUnitId"),
@@ -625,16 +677,25 @@ export async function createBudgetAction(formData: FormData) {
 
   revalidatePath("/budget");
   revalidatePath("/campaigns");
-  revalidatePath(`/campaigns/${budget.campaignId ? (await prisma.campaign.findUnique({ where: { id: budget.campaignId } }))?.campaignCode ?? "campaigns" : "campaigns"}`);
-  redirect(`/campaigns/${budget.campaignId ? (await prisma.campaign.findUnique({ where: { id: budget.campaignId } }))?.campaignCode ?? "campaigns" : "campaigns"}?success=budget-created`);
+
+  let fallback = "/budget";
+  if (budget.campaignId) {
+    const campaign = await prisma.campaign.findUnique({ where: { id: budget.campaignId } });
+    revalidatePath(`/campaigns/${campaign?.campaignCode ?? ""}`);
+    fallback = `/campaigns/${campaign?.campaignCode ?? "campaigns"}`;
+  }
+
+  redirect(withParam(redirectTo || fallback, "success", "budget-created"));
 }
 
 export async function updateBudgetAction(formData: FormData) {
   await requireRole(["ADMIN", "MARKETING_MANAGER"]);
 
+  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
+
   const id = String(formData.get("id"));
   const current = await prisma.budget.findUnique({ where: { id } });
-  if (!current) redirect("/budget?error=budget-not-found");
+  if (!current) redirect(withParam(redirectTo || "/budget", "error", "budget-not-found"));
 
   const payload = budgetSchema.parse({
     businessUnitId: formData.get("businessUnitId") ?? current.businessUnitId,
@@ -655,24 +716,42 @@ export async function updateBudgetAction(formData: FormData) {
 
   revalidatePath("/budget");
   revalidatePath("/campaigns");
-  redirect(updated.campaignId ? `/campaigns/${(await prisma.campaign.findUnique({ where: { id: updated.campaignId } }))?.campaignCode ?? "campaigns"}?success=budget-updated` : "/budget?success=budget-updated");
+
+  let fallback = "/budget";
+  if (updated.campaignId) {
+    const campaign = await prisma.campaign.findUnique({ where: { id: updated.campaignId } });
+    fallback = `/campaigns/${campaign?.campaignCode ?? "campaigns"}`;
+  }
+
+  redirect(withParam(redirectTo || fallback, "success", "budget-updated"));
 }
 
 export async function deleteBudgetAction(formData: FormData) {
   await requireRole(["ADMIN", "MARKETING_MANAGER"]);
 
+  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
+
   const id = String(formData.get("id"));
   const budget = await prisma.budget.findUnique({ where: { id } });
-  if (!budget) redirect("/budget?error=budget-not-found");
+  if (!budget) redirect(withParam(redirectTo || "/budget", "error", "budget-not-found"));
 
   await prisma.budget.delete({ where: { id } });
   revalidatePath("/budget");
   revalidatePath("/campaigns");
-  redirect(budget.campaignId ? `/campaigns/${(await prisma.campaign.findUnique({ where: { id: budget.campaignId } }))?.campaignCode ?? "campaigns"}?success=budget-deleted` : "/budget?success=budget-deleted");
+
+  let fallback = "/budget";
+  if (budget.campaignId) {
+    const campaign = await prisma.campaign.findUnique({ where: { id: budget.campaignId } });
+    fallback = `/campaigns/${campaign?.campaignCode ?? "campaigns"}`;
+  }
+
+  redirect(withParam(redirectTo || fallback, "success", "budget-deleted"));
 }
 
 export async function createExpenseAction(formData: FormData) {
   await requireRole(["ADMIN", "MARKETING_MANAGER"]);
+
+  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
 
   const payload = expenseSchema.parse({
     campaignId: formData.get("campaignId") ?? "",
@@ -702,16 +781,25 @@ export async function createExpenseAction(formData: FormData) {
 
   revalidatePath("/budget");
   revalidatePath("/dashboard");
-  revalidatePath(`/campaigns/${expense.campaignId ? (await prisma.campaign.findUnique({ where: { id: expense.campaignId } }))?.campaignCode ?? "campaigns" : "campaigns"}`);
-  redirect(`/campaigns/${expense.campaignId ? (await prisma.campaign.findUnique({ where: { id: expense.campaignId } }))?.campaignCode ?? "campaigns" : "campaigns"}?success=expense-created`);
+
+  let fallback = "/budget";
+  if (expense.campaignId) {
+    const campaign = await prisma.campaign.findUnique({ where: { id: expense.campaignId } });
+    revalidatePath(`/campaigns/${campaign?.campaignCode ?? ""}`);
+    fallback = `/campaigns/${campaign?.campaignCode ?? "campaigns"}`;
+  }
+
+  redirect(withParam(redirectTo || fallback, "success", "expense-created"));
 }
 
 export async function updateExpenseAction(formData: FormData) {
   await requireRole(["ADMIN", "MARKETING_MANAGER"]);
 
+  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
+
   const id = String(formData.get("id"));
   const current = await prisma.expense.findUnique({ where: { id } });
-  if (!current) redirect("/budget?error=expense-not-found");
+  if (!current) redirect(withParam(redirectTo || "/budget", "error", "expense-not-found"));
 
   const payload = expenseSchema.parse({
     campaignId: formData.get("campaignId") ?? current.campaignId ?? "",
@@ -742,17 +830,33 @@ export async function updateExpenseAction(formData: FormData) {
 
   revalidatePath("/budget");
   revalidatePath("/dashboard");
-  redirect(updated.campaignId ? `/campaigns/${(await prisma.campaign.findUnique({ where: { id: updated.campaignId } }))?.campaignCode ?? "campaigns"}?success=expense-updated` : "/budget?success=expense-updated");
+
+  let fallback = "/budget";
+  if (updated.campaignId) {
+    const campaign = await prisma.campaign.findUnique({ where: { id: updated.campaignId } });
+    fallback = `/campaigns/${campaign?.campaignCode ?? "campaigns"}`;
+  }
+
+  redirect(withParam(redirectTo || fallback, "success", "expense-updated"));
 }
 
 export async function deleteExpenseAction(formData: FormData) {
   await requireRole(["ADMIN", "MARKETING_MANAGER"]);
 
+  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
+
   const id = String(formData.get("id"));
   const expense = await prisma.expense.findUnique({ where: { id } });
-  if (!expense) redirect("/budget?error=expense-not-found");
+  if (!expense) redirect(withParam(redirectTo || "/budget", "error", "expense-not-found"));
 
   await prisma.expense.delete({ where: { id } });
   revalidatePath("/budget");
-  redirect(`/campaigns/${expense.campaignId ? (await prisma.campaign.findUnique({ where: { id: expense.campaignId } }))?.campaignCode ?? "campaigns" : "campaigns"}?success=expense-deleted`);
+
+  let fallback = "/budget";
+  if (expense.campaignId) {
+    const campaign = await prisma.campaign.findUnique({ where: { id: expense.campaignId } });
+    fallback = `/campaigns/${campaign?.campaignCode ?? "campaigns"}`;
+  }
+
+  redirect(withParam(redirectTo || fallback, "success", "expense-deleted"));
 }

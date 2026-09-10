@@ -69,6 +69,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: { m
     grid.push(null);
   }
 
+  const redirectTo = searchParams.month ? `/calendar?month=${searchParams.month}` : "/calendar";
+
   return (
     <div className="p-6 space-y-8">
       <div>
@@ -90,6 +92,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: { m
       <div className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
         <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Añadir tarea al calendario</h2>
         <form action={createTaskAction} className="grid gap-3 md:grid-cols-2">
+          <input type="hidden" name="redirectTo" value={redirectTo} />
           <input type="date" name="dueDate" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} defaultValue={new Date().toISOString().slice(0, 10)} required />
           <input name="title" placeholder="Título de la tarea" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
           <select name="assigneeId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }}>
@@ -129,6 +132,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: { m
 
               return (
                 <form key={day} action={createTaskAction} className="min-h-[120px] border-b border-r p-2" style={{ borderColor: "var(--line)", background: isToday ? "#F7F5F0" : "#fff" }}>
+                  <input type="hidden" name="redirectTo" value={redirectTo} />
                   <input type="hidden" name="dueDate" value={iso} />
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs" style={{ color: isToday ? "var(--c-forest)" : "var(--muted)" }}>{day}</span>
@@ -175,6 +179,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: { m
                       <div className="text-sm" style={{ color: "var(--ink)" }}>{task.title}</div>
                       <form action={deleteTaskAction} className="inline-block">
                         <input type="hidden" name="id" value={task.id} />
+                        <input type="hidden" name="redirectTo" value={redirectTo} />
                         <button type="submit" className="text-[10px] px-2 py-1 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--c-danger)" }}>Borrar</button>
                       </form>
                     </div>
@@ -186,6 +191,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: { m
                     </div>
                     <form action={updateTaskAction} className="mt-2 grid gap-2">
                       <input type="hidden" name="id" value={task.id} />
+                      <input type="hidden" name="redirectTo" value={redirectTo} />
                       <input
                         type="date"
                         name="dueDate"

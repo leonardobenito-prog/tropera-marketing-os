@@ -41,6 +41,10 @@ export default async function BudgetPage({ searchParams }: { searchParams: { fro
   const ex = execState(assigned, actual, committed);
   const fmt = (n: number) => (showAmounts ? money(n) : "•••••");
 
+  const redirectTo = searchParams.from || searchParams.to
+    ? `/budget?${searchParams.from ? `from=${searchParams.from}` : ""}${searchParams.from && searchParams.to ? "&" : ""}${searchParams.to ? `to=${searchParams.to}` : ""}`
+    : "/budget";
+
   return (
     <div className="p-6 space-y-8">
       <h1 className="text-xl heading-title" style={{ color: "var(--ink)" }}>Centro de Presupuesto</h1>
@@ -60,6 +64,7 @@ export default async function BudgetPage({ searchParams }: { searchParams: { fro
         <div className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
           <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Crear presupuesto</h2>
           <form action={createBudgetAction} className="grid gap-3">
+            <input type="hidden" name="redirectTo" value={redirectTo} />
             <select name="businessUnitId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required>
               <option value="">Unidad</option>
               {businessUnits.map((unit) => (<option key={unit.id} value={unit.id}>{unit.name}</option>))}
@@ -79,6 +84,7 @@ export default async function BudgetPage({ searchParams }: { searchParams: { fro
         <div className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
           <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Registrar gasto</h2>
           <form action={createExpenseAction} className="grid gap-3">
+            <input type="hidden" name="redirectTo" value={redirectTo} />
             <select name="businessUnitId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required>
               <option value="">Unidad</option>
               {businessUnits.map((unit) => (<option key={unit.id} value={unit.id}>{unit.name}</option>))}
@@ -129,11 +135,13 @@ export default async function BudgetPage({ searchParams }: { searchParams: { fro
                 </div>
                 <form action={deleteBudgetAction} className="inline-block">
                   <input type="hidden" name="id" value={budget.id} />
+                  <input type="hidden" name="redirectTo" value={redirectTo} />
                   <button type="submit" className="text-[11px] px-2 py-1 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--c-danger)" }}>Borrar</button>
                 </form>
               </div>
               <form action={updateBudgetAction} className="mt-3 grid gap-2 md:grid-cols-4">
                 <input type="hidden" name="id" value={budget.id} />
+                <input type="hidden" name="redirectTo" value={redirectTo} />
                 <select name="businessUnitId" defaultValue={budget.businessUnitId} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
                   {businessUnits.map((unit) => (<option key={unit.id} value={unit.id}>{unit.name}</option>))}
                 </select>
@@ -165,12 +173,14 @@ export default async function BudgetPage({ searchParams }: { searchParams: { fro
                 <div><Badge tone={EXPENSE_STATUS_TONE[e.status]}>{EXPENSE_STATUS_LABEL[e.status]}</Badge></div>
                 <form action={deleteExpenseAction}>
                   <input type="hidden" name="id" value={e.id} />
+                  <input type="hidden" name="redirectTo" value={redirectTo} />
                   <button type="submit" className="text-[11px] px-2 py-1 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--c-danger)" }}>Borrar</button>
                 </form>
               </div>
 
               <form action={updateExpenseAction} className="mt-3 grid gap-2 md:grid-cols-5" style={{ borderTop: "1px solid var(--line)", paddingTop: "0.75rem" }}>
                 <input type="hidden" name="id" value={e.id} />
+                <input type="hidden" name="redirectTo" value={redirectTo} />
                 <input type="date" name="date" defaultValue={new Date(e.date).toISOString().slice(0, 10)} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
                 <input name="category" defaultValue={e.category} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
                 <input type="number" name="amount" defaultValue={e.amount} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
