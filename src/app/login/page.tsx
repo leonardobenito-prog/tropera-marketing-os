@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
@@ -29,6 +30,7 @@ export default function LoginPage() {
         className="bg-white rounded-lg p-8 w-full max-w-sm"
         style={{ border: "1px solid var(--line)" }}
       >
+        <Image src="/logo.png" alt="Tropera" width={64} height={64} className="mb-3 w-16 h-16 object-contain" />
         <h1 className="text-xl heading-title mb-1" style={{ color: "var(--ink)" }}>Tropera</h1>
         <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>Marketing OS</p>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
@@ -38,8 +39,7 @@ export function Sidebar() {
   return (
     <div className="flex flex-col h-full w-[232px] flex-shrink-0" style={{ background: "var(--c-forest)" }}>
       <div className="flex items-center gap-2 px-4 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-        {/* Reemplaza esto por <img src="/logo.png" /> cuando copies el isotipo a /public */}
-        <div className="w-8 h-8 rounded-full bg-white/10" />
+        <Image src="/logo.png" alt="Tropera" width={32} height={32} className="w-8 h-8 object-contain" />
         <div>
           <div className="text-white text-sm heading-title">Tropera</div>
           <div className="text-[10px] text-white/55">Marketing OS</div>
