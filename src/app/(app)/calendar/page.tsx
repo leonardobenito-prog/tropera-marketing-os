@@ -144,6 +144,14 @@ export default async function CalendarPage({ searchParams }: { searchParams: { m
                     {dayTasks.length > 3 && (
                       <div className="text-[10px]" style={{ color: "var(--muted)" }}>+{dayTasks.length - 3} más</div>
                     )}
+                    <input
+                      type="text"
+                      name="title"
+                      placeholder="Título de la tarea"
+                      required
+                      className="text-[10px] px-2 py-1 rounded-md w-full"
+                      style={{ border: "1px solid var(--line)" }}
+                    />
                     <button type="submit" className="text-[10px] px-2 py-1 rounded-md w-full" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--ink)" }}>
                       + Tarea
                     </button>

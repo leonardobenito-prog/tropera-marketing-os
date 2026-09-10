@@ -462,8 +462,14 @@ export async function createTaskAction(formData: FormData) {
   revalidatePath("/today");
   revalidatePath("/calendar");
   revalidatePath("/campaigns");
-  revalidatePath(`/campaigns/${task.campaignId ? (await prisma.campaign.findUnique({ where: { id: task.campaignId } }))?.campaignCode : ""}`);
-  redirect(`/campaigns/${(await prisma.campaign.findUnique({ where: { id: task.campaignId ?? "" } }))?.campaignCode ?? "campaigns"}?success=task-created`);
+
+  if (task.campaignId) {
+    const campaign = await prisma.campaign.findUnique({ where: { id: task.campaignId } });
+    revalidatePath(`/campaigns/${campaign?.campaignCode ?? ""}`);
+    redirect(`/campaigns/${campaign?.campaignCode ?? "campaigns"}?success=task-created`);
+  }
+
+  redirect("/calendar?success=task-created");
 }
 
 export async function updateTaskAction(formData: FormData) {
