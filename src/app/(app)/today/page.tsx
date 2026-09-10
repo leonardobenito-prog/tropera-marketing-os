@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { requireSession } from "@/lib/permissions";
 import { Badge, KPICard } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,27 @@ const PRIORITY_TONE: Record<string, "neutral" | "warning" | "danger"> = {
   HIGH: "danger",
 };
 
-export default async function TodayPage() {
+export default async function TodayPage({
+  searchParams,
+}: {
+  searchParams?: { assignee?: string };
+}) {
+  const session = await requireSession();
+  const currentUserId = String(session.user.id ?? "");
+  const selectedAssigneeId = searchParams?.assignee || currentUserId;
+
+  const [users, tasks] = await Promise.all([
+    prisma.user.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, email: true },
+    }),
+    prisma.task.findMany({
+      where: selectedAssigneeId && selectedAssigneeId !== "all" ? { assigneeId: selectedAssigneeId } : undefined,
+      include: { assignee: true, campaign: true, productionProject: true },
+      orderBy: { dueDate: "asc" },
+    }),
+  ]);
+
   const now = new Date();
   const todayStart = new Date(now);
   todayStart.setHours(0, 0, 0, 0);
@@ -37,36 +58,49 @@ export default async function TodayPage() {
   const todayEnd = new Date(now);
   todayEnd.setHours(23, 59, 59, 999);
 
-  const [overdueTasks, todayTasks, upcomingTasks, inProgressCount] = await Promise.all([
-    prisma.task.findMany({
-      where: { dueDate: { lt: todayStart }, status: { not: "DONE" } },
-      include: { assignee: true, campaign: true, productionProject: true },
-      orderBy: { dueDate: "asc" },
-      take: 6,
-    }),
-    prisma.task.findMany({
-      where: { dueDate: { gte: todayStart, lte: todayEnd }, status: { not: "DONE" } },
-      include: { assignee: true, campaign: true, productionProject: true },
-      orderBy: { dueDate: "asc" },
-    }),
-    prisma.task.findMany({
-      where: { dueDate: { gt: todayEnd }, status: { not: "DONE" } },
-      include: { assignee: true, campaign: true, productionProject: true },
-      orderBy: { dueDate: "asc" },
-      take: 5,
-    }),
-    prisma.task.count({ where: { status: "IN_PROGRESS" } }),
-  ]);
+  const overdueTasks = tasks.filter((task) => task.dueDate && task.dueDate < todayStart && task.status !== "DONE");
+  const todayTasks = tasks.filter((task) => task.dueDate && task.dueDate >= todayStart && task.dueDate <= todayEnd && task.status !== "DONE");
+  const upcomingTasks = tasks.filter((task) => task.dueDate && task.dueDate > todayEnd && task.status !== "DONE");
+  const inProgressCount = tasks.filter((task) => task.status === "IN_PROGRESS").length;
+
+  const selectedUser = users.find((user) => user.id === selectedAssigneeId) ?? null;
 
   return (
     <div className="p-6 space-y-8">
-      <div>
-        <div className="text-xs uppercase tracking-[0.18em]" style={{ color: "var(--muted)" }}>
-          Operación del día
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="text-xs uppercase tracking-[0.18em]" style={{ color: "var(--muted)" }}>
+            Actividad por persona
+          </div>
+          <h1 className="text-xl heading-title mt-1" style={{ color: "var(--ink)" }}>
+            Hoy
+          </h1>
         </div>
-        <h1 className="text-xl heading-title mt-1" style={{ color: "var(--ink)" }}>
-          Hoy
-        </h1>
+
+        <div className="min-w-[220px]">
+          <label className="block text-[11px] uppercase mb-2" style={{ color: "var(--muted)" }}>
+            Filtrar por persona
+          </label>
+          <form method="get">
+            <select
+              name="assignee"
+              defaultValue={selectedAssigneeId}
+              onChange={(event) => {
+                const form = event.currentTarget.form;
+                if (form) form.submit();
+              }}
+              className="w-full px-3 py-2 rounded-md"
+              style={{ border: "1px solid var(--line)", background: "#fff" }}
+            >
+              <option value="all">Todos los miembros</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                </option>
+              ))}
+            </select>
+          </form>
+        </div>
       </div>
 
       <div className="flex gap-3 flex-wrap">
@@ -74,6 +108,15 @@ export default async function TodayPage() {
         <KPICard label="HOY" value={todayTasks.length} accent="var(--c-warning)" />
         <KPICard label="EN PROGRESO" value={inProgressCount} accent="var(--c-copper)" />
         <KPICard label="PRÓXIMAS" value={upcomingTasks.length} accent="var(--c-forest)" />
+      </div>
+
+      <div className="rounded-lg p-4" style={{ background: "#F7F5F0", border: "1px solid var(--line)" }}>
+        <div className="text-[11px] uppercase" style={{ color: "var(--muted)" }}>
+          Vista actual
+        </div>
+        <div className="text-base mt-1 font-medium" style={{ color: "var(--ink)" }}>
+          {selectedAssigneeId === "all" ? "Todas las personas" : selectedUser?.name ?? "Sin asignación"}
+        </div>
       </div>
 
       <div className="grid gap-8 lg:grid-cols-2">
@@ -84,7 +127,7 @@ export default async function TodayPage() {
 
           {todayTasks.length === 0 ? (
             <div className="text-sm px-4 py-3 rounded-lg" style={{ color: "var(--muted)", border: "1px dashed var(--line)" }}>
-              No hay tareas pendientes para hoy.
+              No hay tareas pendientes para hoy en esta vista.
             </div>
           ) : (
             <div className="space-y-3">
@@ -126,7 +169,7 @@ export default async function TodayPage() {
 
           {overdueTasks.length === 0 ? (
             <div className="text-sm px-4 py-3 rounded-lg" style={{ color: "var(--muted)", border: "1px dashed var(--line)" }}>
-              No hay tareas vencidas.
+              No hay tareas vencidas en esta vista.
             </div>
           ) : (
             <div className="space-y-3">
@@ -159,7 +202,7 @@ export default async function TodayPage() {
 
         {upcomingTasks.length === 0 ? (
           <div className="text-sm px-4 py-3 rounded-lg" style={{ color: "var(--muted)", border: "1px dashed var(--line)" }}>
-            No hay entregas próximas en el calendario.
+            No hay entregas próximas para esta persona.
           </div>
         ) : (
           <div className="bg-white rounded-lg overflow-hidden" style={{ border: "1px solid var(--line)" }}>
