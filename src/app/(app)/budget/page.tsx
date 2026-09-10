@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { createBudgetAction, createExpenseAction } from "@/lib/actions/ops";
+import { createBudgetAction, createExpenseAction, updateBudgetAction, deleteBudgetAction, updateExpenseAction, deleteExpenseAction } from "@/lib/actions/ops";
 import { KPICard, Badge, execState, ProgressBar, money } from "@/components/ui";
 import { requireSession, canSeeAmounts } from "@/lib/permissions";
 
@@ -16,10 +16,14 @@ export default async function BudgetPage({ searchParams }: { searchParams: { fro
   const from = searchParams.from ? new Date(searchParams.from) : new Date("2026-06-01");
   const to = searchParams.to ? new Date(searchParams.to) : new Date("2026-10-15");
 
-  const [campaigns, expenses, businessUnits, vendors] = await Promise.all([
+  const [campaigns, budgets, expenses, businessUnits, vendors] = await Promise.all([
     prisma.campaign.findMany({
       where: { startDate: { lte: to }, endDate: { gte: from } },
       include: { budgets: true, businessUnit: true },
+    }),
+    prisma.budget.findMany({
+      include: { businessUnit: true, campaign: true },
+      orderBy: { createdAt: "desc" },
     }),
     prisma.expense.findMany({
       where: { date: { gte: from, lte: to } },
@@ -113,6 +117,39 @@ export default async function BudgetPage({ searchParams }: { searchParams: { fro
       </div>
       <ProgressBar pct={ex.pct} color={ex.color} />
 
+      <div className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
+        <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Presupuestos en el período</h2>
+        <div className="space-y-3">
+          {budgets.map((budget) => (
+            <div key={budget.id} className="rounded-lg p-3" style={{ background: "#F7F5F0" }}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm" style={{ color: "var(--ink)" }}>{budget.businessUnit.name}</div>
+                  <div className="text-xs" style={{ color: "var(--muted)" }}>{budget.campaign?.name ?? "Sin campaña"}</div>
+                </div>
+                <form action={deleteBudgetAction} className="inline-block">
+                  <input type="hidden" name="id" value={budget.id} />
+                  <button type="submit" className="text-[11px] px-2 py-1 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--c-danger)" }}>Borrar</button>
+                </form>
+              </div>
+              <form action={updateBudgetAction} className="mt-3 grid gap-2 md:grid-cols-4">
+                <input type="hidden" name="id" value={budget.id} />
+                <select name="businessUnitId" defaultValue={budget.businessUnitId} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
+                  {businessUnits.map((unit) => (<option key={unit.id} value={unit.id}>{unit.name}</option>))}
+                </select>
+                <select name="campaignId" defaultValue={budget.campaignId ?? ""} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
+                  <option value="">Sin campaña</option>
+                  {campaigns.map((campaign) => (<option key={campaign.id} value={campaign.id}>{campaign.name}</option>))}
+                </select>
+                <input type="number" name="periodYear" defaultValue={budget.periodYear} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
+                <input type="number" name="assignedAmount" defaultValue={budget.assignedAmount} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
+                <button type="submit" className="px-3 py-1.5 rounded-md md:col-span-4" style={{ background: "var(--c-forest)", color: "#fff" }}>Guardar presupuesto</button>
+              </form>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div>
         <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Gastos en el período</h2>
         <div className="bg-white rounded-lg overflow-hidden" style={{ border: "1px solid var(--line)" }}>
@@ -120,11 +157,37 @@ export default async function BudgetPage({ searchParams }: { searchParams: { fro
             <div>FECHA</div><div>CATEGORÍA</div><div>MONTO</div><div>ESTADO</div>
           </div>
           {expenses.map((e) => (
-            <div key={e.id} className="grid items-center px-4 py-3 text-sm" style={{ gridTemplateColumns: "0.8fr 1.2fr 1fr 0.9fr", borderBottom: "1px solid var(--line)" }}>
-              <div style={{ color: "var(--muted)" }}>{e.date.toLocaleDateString("es-CL")}</div>
-              <div style={{ color: "var(--ink)" }}>{e.category}</div>
-              <div style={{ color: "var(--ink)" }}>{fmt(e.amount)}</div>
-              <div><Badge tone={EXPENSE_STATUS_TONE[e.status]}>{EXPENSE_STATUS_LABEL[e.status]}</Badge></div>
+            <div key={e.id} className="px-4 py-3 text-sm" style={{ borderBottom: "1px solid var(--line)" }}>
+              <div className="grid items-center gap-2" style={{ gridTemplateColumns: "0.8fr 1.2fr 1fr 0.9fr auto" }}>
+                <div style={{ color: "var(--muted)" }}>{e.date.toLocaleDateString("es-CL")}</div>
+                <div style={{ color: "var(--ink)" }}>{e.category}</div>
+                <div style={{ color: "var(--ink)" }}>{fmt(e.amount)}</div>
+                <div><Badge tone={EXPENSE_STATUS_TONE[e.status]}>{EXPENSE_STATUS_LABEL[e.status]}</Badge></div>
+                <form action={deleteExpenseAction}>
+                  <input type="hidden" name="id" value={e.id} />
+                  <button type="submit" className="text-[11px] px-2 py-1 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--c-danger)" }}>Borrar</button>
+                </form>
+              </div>
+
+              <form action={updateExpenseAction} className="mt-3 grid gap-2 md:grid-cols-5" style={{ borderTop: "1px solid var(--line)", paddingTop: "0.75rem" }}>
+                <input type="hidden" name="id" value={e.id} />
+                <input type="date" name="date" defaultValue={new Date(e.date).toISOString().slice(0, 10)} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
+                <input name="category" defaultValue={e.category} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
+                <input type="number" name="amount" defaultValue={e.amount} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
+                <select name="status" defaultValue={e.status} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
+                  <option value="PLANNED">Planificado</option>
+                  <option value="COMMITTED">Comprometido</option>
+                  <option value="PAID">Pagado</option>
+                </select>
+                <input type="hidden" name="businessUnitId" value={e.businessUnitId} />
+                <input type="hidden" name="campaignId" value={e.campaignId ?? ""} />
+                <input type="hidden" name="budgetId" value={e.budgetId ?? ""} />
+                <input type="hidden" name="vendorId" value={e.vendorId ?? ""} />
+                <textarea name="notes" defaultValue={e.notes ?? ""} className="px-2 py-1.5 rounded-md text-xs md:col-span-5" style={{ border: "1px solid var(--line)" }} rows={2} />
+                <button type="submit" className="px-3 py-1.5 rounded-md md:col-span-5" style={{ background: "var(--c-forest)", color: "#fff" }}>
+                  Guardar gasto
+                </button>
+              </form>
             </div>
           ))}
         </div>

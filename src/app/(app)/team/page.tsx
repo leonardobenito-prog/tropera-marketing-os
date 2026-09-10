@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { createTeamMemberAction } from "@/lib/actions/ops";
 import { Badge, KPICard } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -25,14 +26,17 @@ const TASK_STATUS_TONE: Record<string, "neutral" | "warning" | "success"> = {
 };
 
 export default async function TeamPage() {
-  const users = await prisma.user.findMany({
-    include: {
-      functionalRoles: true,
-      assignedTasks: true,
-      ownedCampaigns: true,
-    },
-    orderBy: { name: "asc" },
-  });
+  const [users, functionalRoles] = await Promise.all([
+    prisma.user.findMany({
+      include: {
+        functionalRoles: true,
+        assignedTasks: true,
+        ownedCampaigns: true,
+      },
+      orderBy: { name: "asc" },
+    }),
+    prisma.functionalRole.findMany({ orderBy: { name: "asc" } }),
+  ]);
 
   const totalTasks = users.reduce((sum, user) => sum + user.assignedTasks.length, 0);
   const activeMembers = users.filter((user) => user.assignedTasks.length > 0 || user.ownedCampaigns.length > 0).length;
@@ -46,6 +50,35 @@ export default async function TeamPage() {
         <h1 className="text-xl heading-title mt-1" style={{ color: "var(--ink)" }}>
           Organización y carga de trabajo
         </h1>
+      </div>
+
+      <div className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
+        <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Crear miembro del equipo</h2>
+        <form action={createTeamMemberAction} className="grid gap-3 md:grid-cols-2">
+          <input name="name" placeholder="Nombre completo" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
+          <input type="email" name="email" placeholder="Correo institucional" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
+          <select name="systemRole" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} defaultValue="TEAM_MEMBER">
+            <option value="ADMIN">Admin</option>
+            <option value="MARKETING_MANAGER">Marketing Manager</option>
+            <option value="TEAM_MEMBER">Team Member</option>
+            <option value="VIEWER">Viewer</option>
+          </select>
+          <input type="password" name="password" placeholder="Contraseña temporal" minLength={8} className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
+          <div className="md:col-span-2">
+            <div className="text-[11px] uppercase mb-2" style={{ color: "var(--muted)" }}>Roles funcionales</div>
+            <div className="grid gap-2 md:grid-cols-3">
+              {functionalRoles.map((role) => (
+                <label key={role.id} className="flex items-center gap-2 text-sm" style={{ color: "var(--ink)" }}>
+                  <input type="checkbox" name="functionalRoleIds" value={role.id} />
+                  <span>{role.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <button type="submit" className="px-4 py-2 rounded-md md:col-span-2" style={{ background: "var(--c-forest)", color: "#fff" }}>
+            Guardar miembro
+          </button>
+        </form>
       </div>
 
       <div className="flex gap-3 flex-wrap">

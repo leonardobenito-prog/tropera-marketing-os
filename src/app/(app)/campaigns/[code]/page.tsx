@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { createTaskAction, createProductionProjectAction } from "@/lib/actions/ops";
+import { createTaskAction, createProductionProjectAction, updateTaskAction, deleteTaskAction } from "@/lib/actions/ops";
 import { KPICard, money, execState, ProgressBar } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -111,11 +111,39 @@ export default async function CampaignDetailPage({ params }: { params: { code: s
 
       <div>
         <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Tareas</h2>
-        <div className="space-y-2">
+        <div className="space-y-3">
           {campaign.tasks.map((t) => (
-            <div key={t.id} className="flex items-center justify-between px-4 py-3 bg-white rounded-lg text-sm" style={{ border: "1px solid var(--line)" }}>
-              <span>{t.title}</span>
-              <span style={{ color: "var(--muted)" }}>{t.assignee?.name ?? "Sin asignar"}</span>
+            <div key={t.id} className="px-4 py-3 bg-white rounded-lg text-sm" style={{ border: "1px solid var(--line)" }}>
+              <div className="flex items-center justify-between gap-3">
+                <span>{t.title}</span>
+                <form action={deleteTaskAction} className="inline-block">
+                  <input type="hidden" name="id" value={t.id} />
+                  <button type="submit" className="text-[11px] px-2 py-1 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--c-danger)" }}>Borrar</button>
+                </form>
+              </div>
+              <form action={updateTaskAction} className="mt-3 grid gap-2 md:grid-cols-5">
+                <input type="hidden" name="id" value={t.id} />
+                <input type="hidden" name="campaignId" value={campaign.id} />
+                <input name="title" defaultValue={t.title} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
+                <select name="assigneeId" defaultValue={t.assigneeId ?? ""} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
+                  <option value="">Sin asignar</option>
+                  {users.map((user) => (<option key={user.id} value={user.id}>{user.name}</option>))}
+                </select>
+                <input type="date" name="dueDate" defaultValue={t.dueDate ? new Date(t.dueDate).toISOString().slice(0, 10) : ""} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
+                <select name="status" defaultValue={t.status} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
+                  <option value="TODO">Por hacer</option>
+                  <option value="IN_PROGRESS">En progreso</option>
+                  <option value="REVIEW">Revisión</option>
+                  <option value="DONE">Hecho</option>
+                </select>
+                <input type="number" name="cost" defaultValue={t.cost ?? ""} className="px-2 py-1.5 rounded-md text-xs md:col-span-2" style={{ border: "1px solid var(--line)" }} />
+                <select name="priority" defaultValue={t.priority} className="px-2 py-1.5 rounded-md text-xs md:col-span-2" style={{ border: "1px solid var(--line)" }}>
+                  <option value="LOW">Baja</option>
+                  <option value="MEDIUM">Media</option>
+                  <option value="HIGH">Alta</option>
+                </select>
+                <button type="submit" className="px-3 py-1.5 rounded-md md:col-span-1" style={{ background: "var(--c-forest)", color: "#fff" }}>Guardar</button>
+              </form>
             </div>
           ))}
           {campaign.tasks.length === 0 && (

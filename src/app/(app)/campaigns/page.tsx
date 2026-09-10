@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { createCampaignAction } from "@/lib/actions/ops";
+import { createCampaignAction, updateCampaignAction, deleteCampaignAction } from "@/lib/actions/ops";
 import { Badge, ProgressBar, execState } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -72,29 +72,60 @@ export default async function CampaignsPage() {
           const committed = c.expenses.filter((e) => e.status === "COMMITTED").reduce((s, e) => s + e.amount, 0);
           const ex = execState(assigned, actual, committed);
           return (
-            <Link
-              key={c.id}
-              href={`/campaigns/${c.campaignCode}`}
-              className="grid items-center px-4 py-3 text-sm"
-              style={{ gridTemplateColumns: "1.6fr 1fr 1fr 1.4fr 0.8fr", borderBottom: "1px solid var(--line)" }}
-            >
-              <div>
-                <div style={{ color: "var(--ink)" }}>{c.name}</div>
-                <div className="text-xs" style={{ color: "var(--muted)" }}>
-                  {c.startDate.toLocaleDateString("es-CL")} — {c.endDate.toLocaleDateString("es-CL")}
+            <div key={c.id} className="px-4 py-3 text-sm" style={{ borderBottom: "1px solid var(--line)" }}>
+              <div className="grid items-center gap-3" style={{ gridTemplateColumns: "1.6fr 1fr 1fr 1.4fr 0.8fr auto" }}>
+                <Link href={`/campaigns/${c.campaignCode}`} className="contents">
+                  <div>
+                    <div style={{ color: "var(--ink)" }}>{c.name}</div>
+                    <div className="text-xs" style={{ color: "var(--muted)" }}>
+                      {c.startDate.toLocaleDateString("es-CL")} — {c.endDate.toLocaleDateString("es-CL")}
+                    </div>
+                  </div>
+                  <div style={{ color: "var(--ink)" }}>{c.businessUnit.name}</div>
+                  <div><Badge tone={STATUS_TONE[c.status] || "neutral"}>{STATUS_LABEL[c.status] || c.status}</Badge></div>
+                  <div>
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span style={{ color: "var(--muted)" }}>{Math.round(ex.pct * 100)}%</span>
+                      <span style={{ color: ex.color }}>{ex.label}</span>
+                    </div>
+                    <ProgressBar pct={ex.pct} color={ex.color} />
+                  </div>
+                  <div className="text-xs" style={{ color: "var(--muted)", fontFamily: "monospace" }}>{c.campaignCode}</div>
+                </Link>
+                <div className="flex gap-2 justify-end">
+                  <form action={deleteCampaignAction} className="inline-block">
+                    <input type="hidden" name="id" value={c.id} />
+                    <button type="submit" className="text-[11px] px-2 py-1 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--c-danger)" }}>Borrar</button>
+                  </form>
                 </div>
               </div>
-              <div style={{ color: "var(--ink)" }}>{c.businessUnit.name}</div>
-              <div><Badge tone={STATUS_TONE[c.status] || "neutral"}>{STATUS_LABEL[c.status] || c.status}</Badge></div>
-              <div>
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span style={{ color: "var(--muted)" }}>{Math.round(ex.pct * 100)}%</span>
-                  <span style={{ color: ex.color }}>{ex.label}</span>
-                </div>
-                <ProgressBar pct={ex.pct} color={ex.color} />
-              </div>
-              <div className="text-xs" style={{ color: "var(--muted)", fontFamily: "monospace" }}>{c.campaignCode}</div>
-            </Link>
+
+              <form action={updateCampaignAction} className="mt-3 grid gap-2 md:grid-cols-3" style={{ borderTop: "1px solid var(--line)", paddingTop: "0.75rem" }}>
+                <input type="hidden" name="id" value={c.id} />
+                <input type="hidden" name="campaignCode" value={c.campaignCode} />
+                <input name="name" defaultValue={c.name} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
+                <select name="businessUnitId" defaultValue={c.businessUnitId} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
+                  {businessUnits.map((unit) => (<option key={unit.id} value={unit.id}>{unit.name}</option>))}
+                </select>
+                <select name="status" defaultValue={c.status} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
+                  <option value="DRAFT">Borrador</option>
+                  <option value="ACTIVE">Activa</option>
+                  <option value="PAUSED">Pausada</option>
+                  <option value="COMPLETED">Finalizada</option>
+                  <option value="CANCELLED">Cancelada</option>
+                </select>
+                <input type="date" name="startDate" defaultValue={new Date(c.startDate).toISOString().slice(0, 10)} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
+                <input type="date" name="endDate" defaultValue={new Date(c.endDate).toISOString().slice(0, 10)} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
+                <select name="ownerId" defaultValue={c.ownerId ?? ""} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
+                  <option value="">Sin responsable</option>
+                  {users.map((user) => (<option key={user.id} value={user.id}>{user.name}</option>))}
+                </select>
+                <textarea name="objective" defaultValue={c.objective ?? ""} className="px-2 py-1.5 rounded-md text-xs md:col-span-3" style={{ border: "1px solid var(--line)" }} rows={2} />
+                <button type="submit" className="px-3 py-1.5 rounded-md md:col-span-3" style={{ background: "var(--c-forest)", color: "#fff" }}>
+                  Guardar cambios
+                </button>
+              </form>
+            </div>
           );
         })}
       </div>

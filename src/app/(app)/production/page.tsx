@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { createProductionProjectAction } from "@/lib/actions/ops";
+import { createProductionProjectAction, updateProductionProjectAction, deleteProductionProjectAction } from "@/lib/actions/ops";
 import { Badge, KPICard } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -159,6 +159,39 @@ export default async function ProductionPage() {
                   </div>
                 )}
               </div>
+            </div>
+
+            <div className="mt-4 pt-4" style={{ borderTop: "1px solid var(--line)" }}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-[11px] uppercase" style={{ color: "var(--muted)" }}>Editar proyecto</div>
+                <form action={deleteProductionProjectAction} className="inline-block">
+                  <input type="hidden" name="id" value={project.id} />
+                  <button type="submit" className="text-[11px] px-2 py-1 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--c-danger)" }}>Eliminar</button>
+                </form>
+              </div>
+
+              <form action={updateProductionProjectAction} className="mt-3 grid gap-2 md:grid-cols-4">
+                <input type="hidden" name="id" value={project.id} />
+                <input name="name" defaultValue={project.name} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
+                <select name="campaignId" defaultValue={project.campaignId ?? ""} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
+                  <option value="">Sin campaña</option>
+                  {campaigns.map((campaign) => (<option key={campaign.id} value={campaign.id}>{campaign.name}</option>))}
+                </select>
+                <select name="purpose" defaultValue={project.purpose} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
+                  <option value="CAMPAIGN">Campaña</option>
+                  <option value="EVERGREEN">Evergreen</option>
+                  <option value="BRAND">Marca</option>
+                </select>
+                <select name="status" defaultValue={project.status} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
+                  <option value="BACKLOG">Backlog</option>
+                  <option value="IN_PRODUCTION">En producción</option>
+                  <option value="REVIEW">Revisión</option>
+                  <option value="APPROVED">Aprobado</option>
+                  <option value="PUBLISHED">Publicado</option>
+                  <option value="IMPLEMENTED">Implementado</option>
+                </select>
+                <button type="submit" className="px-3 py-1.5 rounded-md md:col-span-4" style={{ background: "var(--c-forest)", color: "#fff" }}>Guardar proyecto</button>
+              </form>
             </div>
           </div>
         ))}
