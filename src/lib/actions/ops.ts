@@ -96,6 +96,50 @@ const changePasswordSchema = z.object({
   confirmPassword: z.string().min(1, "Debes confirmar la nueva contraseña."),
 });
 
+const registerSchema = z.object({
+  name: z.string().trim().min(2, "El nombre es obligatorio."),
+  email: z.string().trim().email("Debes ingresar un correo válido."),
+  password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres."),
+});
+
+// Autoservicio para primer ingreso — sin requireRole, cualquiera puede llamarla desde /register.
+// Restringida al dominio de la empresa para que no cualquiera en internet cree una cuenta con
+// acceso a campañas/presupuesto; nuevo usuario entra como TEAM_MEMBER (rol mínimo operativo).
+const ALLOWED_REGISTER_DOMAIN = "@tropera.cl";
+
+export async function registerAction(formData: FormData): Promise<{ error?: string } | void> {
+  const parsed = registerSchema.safeParse({
+    name: formData.get("name"),
+    email: formData.get("email"),
+    password: formData.get("password"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+  const payload = parsed.data;
+  const email = payload.email.toLowerCase();
+
+  if (!email.endsWith(ALLOWED_REGISTER_DOMAIN)) {
+    return { error: `Solo se permiten cuentas con correo ${ALLOWED_REGISTER_DOMAIN}.` };
+  }
+
+  const existingUser = await prisma.user.findUnique({ where: { email } });
+  if (existingUser) {
+    return { error: "Ya existe una cuenta con este correo." };
+  }
+
+  await prisma.user.create({
+    data: {
+      name: payload.name,
+      email,
+      systemRole: "TEAM_MEMBER",
+      passwordHash: await bcrypt.hash(payload.password, 10),
+    },
+  });
+
+  revalidatePath("/team");
+}
+
 export async function createTeamMemberAction(formData: FormData) {
   await requireRole(["ADMIN"]);
 
