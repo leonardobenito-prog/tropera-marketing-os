@@ -95,6 +95,8 @@ export default async function CampaignsPage({ searchParams }: { searchParams: { 
             <option value="">Digital o Análoga (opcional)</option>
             {MEDIA_TYPE_OPTIONS.map((m) => (<option key={m} value={m}>{MEDIA_TYPE_LABEL[m]}</option>))}
           </select>
+          <input type="number" name="periodYear" placeholder="Año del presupuesto" min={2024} defaultValue={new Date().getFullYear()} className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} />
+          <input type="number" name="assignedAmount" placeholder="Presupuesto a asignar (opcional)" min={0} className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} />
           <textarea name="objective" placeholder="Objetivo" className="px-3 py-2 rounded-md md:col-span-2" style={{ border: "1px solid var(--line)" }} rows={3} />
           <select name="status" className="px-3 py-2 rounded-md md:col-span-2" style={{ border: "1px solid var(--line)" }} defaultValue="DRAFT">
             <option value="DRAFT">Borrador</option>

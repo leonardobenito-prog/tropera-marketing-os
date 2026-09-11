@@ -25,6 +25,8 @@ const campaignSchema = z.object({
   startDate: z.string().min(1, "La fecha de inicio es obligatoria."),
   endDate: z.string().min(1, "La fecha de término es obligatoria."),
   ownerId: z.string().optional().or(z.literal("")),
+  periodYear: z.coerce.number().min(2024).optional().or(z.literal("")),
+  assignedAmount: z.coerce.number().min(0).optional().or(z.literal("")),
 });
 
 const taskSchema = z.object({
@@ -213,6 +215,8 @@ export async function createCampaignAction(formData: FormData) {
     startDate: formData.get("startDate"),
     endDate: formData.get("endDate"),
     ownerId: formData.get("ownerId") ?? "",
+    periodYear: formData.get("periodYear") ?? "",
+    assignedAmount: formData.get("assignedAmount") ?? "",
   });
 
   const campaign = await prisma.campaign.create({
@@ -230,7 +234,19 @@ export async function createCampaignAction(formData: FormData) {
     },
   });
 
+  if (payload.assignedAmount) {
+    await prisma.budget.create({
+      data: {
+        businessUnitId: payload.businessUnitId,
+        campaignId: campaign.id,
+        periodYear: payload.periodYear || new Date().getFullYear(),
+        assignedAmount: payload.assignedAmount,
+      },
+    });
+  }
+
   revalidatePath("/campaigns");
+  revalidatePath("/budget");
   revalidatePath(`/campaigns/${campaign.campaignCode}`);
   redirect(withParam(redirectTo || `/campaigns/${campaign.campaignCode}`, "success", "campaign-created"));
 }
