@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { createCampaignAction, updateCampaignAction, deleteCampaignAction } from "@/lib/actions/ops";
-import { Badge, ProgressBar, execState } from "@/components/ui";
+import { createCampaignAction, updateCampaignAction, deleteCampaignAction, createBudgetAction, deleteBudgetAction } from "@/lib/actions/ops";
+import { Badge, ProgressBar, execState, money } from "@/components/ui";
 import type { Prisma, CampaignMediaType } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -189,6 +189,34 @@ export default async function CampaignsPage({ searchParams }: { searchParams: { 
                   Guardar cambios
                 </button>
               </form>
+
+              <div className="mt-3 pt-3 grid gap-3 md:grid-cols-2" style={{ borderTop: "1px solid var(--line)" }}>
+                <div>
+                  <div className="text-[11px] uppercase mb-2" style={{ color: "var(--muted)" }}>Presupuesto asignado: {money(assigned)}</div>
+                  {c.budgets.length > 0 && (
+                    <div className="space-y-1">
+                      {c.budgets.map((b) => (
+                        <div key={b.id} className="flex items-center justify-between text-xs rounded-md px-2 py-1" style={{ background: "#F7F5F0" }}>
+                          <span style={{ color: "var(--ink)" }}>{b.periodYear} — {money(b.assignedAmount)}</span>
+                          <form action={deleteBudgetAction} className="inline-block">
+                            <input type="hidden" name="id" value={b.id} />
+                            <input type="hidden" name="redirectTo" value="/campaigns" />
+                            <button type="submit" style={{ color: "var(--c-danger)" }}>Borrar</button>
+                          </form>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <form action={createBudgetAction} className="grid grid-cols-3 gap-2 h-fit">
+                  <input type="hidden" name="campaignId" value={c.id} />
+                  <input type="hidden" name="businessUnitId" value={c.businessUnitId} />
+                  <input type="hidden" name="redirectTo" value="/campaigns" />
+                  <input type="number" name="periodYear" placeholder="Año" min={2024} defaultValue={new Date().getFullYear()} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} required />
+                  <input type="number" name="assignedAmount" placeholder="Monto" min={0} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} required />
+                  <button type="submit" className="px-2 py-1.5 rounded-md text-xs" style={{ background: "var(--c-forest)", color: "#fff" }}>+ Presupuesto</button>
+                </form>
+              </div>
             </div>
           );
         })}

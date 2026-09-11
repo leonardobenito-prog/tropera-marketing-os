@@ -1,16 +1,14 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import {
-  createBudgetAction, createExpenseAction, updateBudgetAction, deleteBudgetAction, updateExpenseAction, deleteExpenseAction,
+  createExpenseAction,
   createBudgetMatrixEntryAction, updateBudgetMatrixEntryAction, deleteBudgetMatrixEntryAction,
 } from "@/lib/actions/ops";
-import { KPICard, Badge, execState, ProgressBar, money } from "@/components/ui";
+import { KPICard, money } from "@/components/ui";
 import { requireSession, canSeeAmounts } from "@/lib/permissions";
 import type { Prisma, BudgetAxis } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
-
-const EXPENSE_STATUS_LABEL: Record<string, string> = { PLANNED: "Planificado", COMMITTED: "Comprometido", PAID: "Pagado" };
-const EXPENSE_STATUS_TONE: Record<string, "neutral" | "warning" | "success"> = { PLANNED: "neutral", COMMITTED: "warning", PAID: "success" };
 
 const AXIS_LABEL: Record<string, string> = {
   RECOGNITION: "Reconocimiento", PROMOTIONS: "Promociones", EVENTS: "Eventos", DELIVERY: "Delivery",
@@ -22,7 +20,21 @@ const MONTH_LABEL = [
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
 
-// Filtro por ventana de tiempo y eje vía querystring: /budget?from=2026-09-01&to=2026-09-09&axis=EVENTS
+const PROJECT_STATUS_LABEL: Record<string, string> = {
+  BACKLOG: "Backlog", IN_PRODUCTION: "En producción", REVIEW: "Revisión",
+  APPROVED: "Aprobado", PUBLISHED: "Publicado", IMPLEMENTED: "Implementado",
+};
+
+function SectionHeader({ title, href }: { title: string; href: string }) {
+  return (
+    <div className="flex items-center justify-between mb-3">
+      <h2 className="text-lg heading-title" style={{ color: "var(--ink)" }}>{title}</h2>
+      <Link href={href} className="text-xs" style={{ color: "var(--c-copper)" }}>Ver detalle →</Link>
+    </div>
+  );
+}
+
+// Filtro por ventana de tiempo y eje vía querystring — se usa para el desglose de gasto por local.
 export default async function BudgetPage({ searchParams }: { searchParams: { from?: string; to?: string; axis?: string } }) {
   const session = await requireSession();
   const showAmounts = canSeeAmounts(session.user.role);
@@ -35,49 +47,58 @@ export default async function BudgetPage({ searchParams }: { searchParams: { fro
     ? { OR: [{ axis: axisFilter as BudgetAxis }, { axis: null, campaign: { axis: axisFilter as BudgetAxis } }] }
     : {};
 
-  const [campaigns, budgets, expenses, businessUnits, vendors, locations, matrixEntries, allCampaignBudgets, directExpenses] = await Promise.all([
-    prisma.campaign.findMany({
-      where: {
-        startDate: { lte: to },
-        endDate: { gte: from },
-        ...(axisFilter ? { axis: axisFilter as BudgetAxis } : {}),
-      },
-      include: { budgets: true, businessUnit: true },
-    }),
-    prisma.budget.findMany({
-      include: { businessUnit: true, campaign: true },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.expense.findMany({
-      where: { date: { gte: from, lte: to }, ...expenseAxisWhere },
-      include: { businessUnit: true, location: true, campaign: true },
-      orderBy: { date: "asc" },
-    }),
+  const [
+    campaigns, businessUnits, vendors, locations, matrixEntries,
+    campaignBudgets, directExpenses, filteredExpenses, tasksWithCost, projectsWithBudget,
+  ] = await Promise.all([
+    prisma.campaign.findMany({ orderBy: { name: "asc" } }),
     prisma.businessUnit.findMany({ orderBy: { name: "asc" } }),
     prisma.vendor.findMany({ orderBy: { name: "asc" } }),
     prisma.location.findMany({ orderBy: { name: "asc" } }),
     prisma.budgetMatrixEntry.findMany({ orderBy: [{ periodYear: "desc" }, { periodMonth: "desc" }] }),
-    prisma.budget.findMany({ where: { campaignId: { not: null } } }),
+    prisma.budget.findMany({ where: { campaignId: { not: null } }, include: { campaign: true } }),
     prisma.expense.findMany({ where: { campaignId: null } }),
+    prisma.expense.findMany({
+      where: { date: { gte: from, lte: to }, ...expenseAxisWhere },
+      include: { location: true, campaign: true },
+      orderBy: { date: "asc" },
+    }),
+    prisma.task.findMany({
+      where: { cost: { not: null } },
+      include: { assignee: true, campaign: true, productionProject: true },
+      orderBy: { dueDate: "asc" },
+    }),
+    prisma.productionProject.findMany({
+      where: { budgetAmount: { not: null } },
+      include: { assignee: true, campaign: true },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
 
-  // Matriz presupuestaria — pool general, no acotado por el rango de fechas del filtro.
+  // Matriz presupuestaria — un solo pool general. Todo monto ingresado en Calendario/Tareas,
+  // Producción o Campañas se descuenta de aquí, junto con los gastos directos (sin campaña).
   const matrixTotal = matrixEntries.reduce((s, m) => s + m.amount, 0);
-  const assignedToCampaigns = allCampaignBudgets.reduce((s, b) => s + b.assignedAmount, 0);
+  const tasksCost = tasksWithCost.reduce((s, t) => s + (t.cost ?? 0), 0);
+  const productionCost = projectsWithBudget.reduce((s, p) => s + (p.budgetAmount ?? 0), 0);
+  const campaignsCost = campaignBudgets.reduce((s, b) => s + b.assignedAmount, 0);
   const directActual = directExpenses.filter((e) => e.status === "PAID").reduce((s, e) => s + e.amount, 0);
   const directCommitted = directExpenses.filter((e) => e.status === "COMMITTED").reduce((s, e) => s + e.amount, 0);
-  const matrixAvailable = matrixTotal - assignedToCampaigns - directActual - directCommitted;
+  const matrixAvailable = matrixTotal - tasksCost - productionCost - campaignsCost - directActual - directCommitted;
   const fmt = (n: number) => (showAmounts ? money(n) : "•••••");
 
-  const assigned = campaigns.reduce((a, c) => a + c.budgets.reduce((s, b) => s + b.assignedAmount, 0), 0);
-  const actual = expenses.filter((e) => e.status === "PAID").reduce((s, e) => s + e.amount, 0);
-  const committed = expenses.filter((e) => e.status === "COMMITTED").reduce((s, e) => s + e.amount, 0);
-  const available = assigned - actual - committed;
-  const ex = execState(assigned, actual, committed);
+  // Campañas agrupadas — una campaña puede tener varias asignaciones (distintos años).
+  const campaignBudgetMap = new Map<string, { name: string; code: string; total: number }>();
+  for (const b of campaignBudgets) {
+    if (!b.campaignId || !b.campaign) continue;
+    const entry = campaignBudgetMap.get(b.campaignId) ?? { name: b.campaign.name, code: b.campaign.campaignCode, total: 0 };
+    entry.total += b.assignedAmount;
+    campaignBudgetMap.set(b.campaignId, entry);
+  }
+  const campaignBudgetList = Array.from(campaignBudgetMap.values()).sort((a, b) => b.total - a.total);
 
   // Gasto por local — a partir de los gastos ya filtrados por período + eje.
   const byLocation = new Map<string, { name: string; actual: number; committed: number }>();
-  for (const e of expenses) {
+  for (const e of filteredExpenses) {
     const key = e.locationId ?? "__none__";
     const name = e.location?.name ?? "Sin local";
     const entry = byLocation.get(key) ?? { name, actual: 0, committed: 0 };
@@ -112,11 +133,13 @@ export default async function BudgetPage({ searchParams }: { searchParams: { fro
       <div>
         <h2 className="text-lg heading-title mb-1" style={{ color: "var(--ink)" }}>Matriz presupuestaria</h2>
         <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>
-          Vista general del presupuesto total, sin dividir por unidad ni local. Cada gasto directo y cada presupuesto asignado a una campaña se descuenta de este total.
+          Hay un solo presupuesto: cada monto que ingreses en Calendario/Tareas, Producción o Campañas —o un gasto directo aquí mismo— se descuenta de este total.
         </p>
         <div className="flex gap-3 flex-wrap mb-4">
           <KPICard label="TOTAL MATRIZ" value={fmt(matrixTotal)} accent="var(--c-forest)" />
-          <KPICard label="ASIGNADO A CAMPAÑAS" value={fmt(assignedToCampaigns)} accent="var(--c-copper)" />
+          <KPICard label="CALENDARIO" value={fmt(tasksCost)} accent="var(--c-copper)" />
+          <KPICard label="PRODUCCIÓN" value={fmt(productionCost)} accent="var(--c-copper)" />
+          <KPICard label="CAMPAÑAS" value={fmt(campaignsCost)} accent="var(--c-copper)" />
           <KPICard label="GASTADO DIRECTO" value={fmt(directActual)} accent="var(--c-warning)" />
           <KPICard label="COMPROMETIDO DIRECTO" value={fmt(directCommitted)} accent="var(--c-warning)" />
           <KPICard label="DISPONIBLE" value={fmt(matrixAvailable)} accent={matrixAvailable < 0 ? "var(--c-danger)" : "var(--c-success)"} />
@@ -181,98 +204,145 @@ export default async function BudgetPage({ searchParams }: { searchParams: { fro
         </div>
       </div>
 
-      <form className="flex items-center gap-2 text-xs flex-wrap" style={{ color: "var(--muted)" }}>
-        Del <input type="date" name="from" defaultValue={searchParams.from ?? "2026-06-01"} className="px-2 py-1.5 rounded-md" style={{ border: "1px solid var(--line)" }} />
-        al <input type="date" name="to" defaultValue={searchParams.to ?? "2026-10-15"} className="px-2 py-1.5 rounded-md" style={{ border: "1px solid var(--line)" }} />
-        Eje
-        <select name="axis" defaultValue={axisFilter} className="px-2 py-1.5 rounded-md" style={{ border: "1px solid var(--line)" }}>
-          <option value="">Todos</option>
-          {AXIS_OPTIONS.map((a) => (<option key={a} value={a}>{AXIS_LABEL[a]}</option>))}
-        </select>
-        <button type="submit" className="px-3 py-1.5 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--ink)" }}>Filtrar</button>
-      </form>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
-          <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Asignar presupuesto a campaña</h2>
-          <form action={createBudgetAction} className="grid gap-3">
-            <input type="hidden" name="redirectTo" value={redirectTo} />
-            <select name="businessUnitId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required>
-              <option value="">Unidad</option>
-              {businessUnits.map((unit) => (<option key={unit.id} value={unit.id}>{unit.name}</option>))}
-            </select>
-            <select name="campaignId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }}>
-              <option value="">Campaña (opcional)</option>
-              {campaigns.map((campaign) => (<option key={campaign.id} value={campaign.id}>{campaign.name}</option>))}
-            </select>
-            <input type="number" name="periodYear" placeholder="Año" min={2024} className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
-            <input type="number" name="assignedAmount" placeholder="Monto asignado" min={0} className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
-            <p className="text-xs" style={{ color: "var(--muted)" }}>El eje de la campaña se define al crearla o editarla en el módulo de Campañas.</p>
-            <button type="submit" className="px-4 py-2 rounded-md" style={{ background: "var(--c-forest)", color: "#fff" }}>
-              Guardar presupuesto
-            </button>
-          </form>
+      <div>
+        <SectionHeader title="Gastos asociados a Tareas del Calendario" href="/calendar" />
+        <div className="flex gap-3 flex-wrap mb-3">
+          <KPICard label="TOTAL" value={fmt(tasksCost)} accent="var(--c-copper)" />
+          <KPICard label="TAREAS CON COSTO" value={tasksWithCost.length} accent="var(--c-forest)" />
         </div>
-
-        <div className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
-          <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Registrar gasto</h2>
-          <form action={createExpenseAction} className="grid gap-3">
-            <input type="hidden" name="redirectTo" value={redirectTo} />
-            <select name="businessUnitId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required>
-              <option value="">Unidad</option>
-              {businessUnits.map((unit) => (<option key={unit.id} value={unit.id}>{unit.name}</option>))}
-            </select>
-            <select name="campaignId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }}>
-              <option value="">Campaña (opcional — vacío = gasto directo de la matriz)</option>
-              {campaigns.map((campaign) => (<option key={campaign.id} value={campaign.id}>{campaign.name}</option>))}
-            </select>
-            <div className="grid gap-3 md:grid-cols-2">
-              <select name="locationId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }}>
-                <option value="">Local (opcional)</option>
-                {locations.map((loc) => (<option key={loc.id} value={loc.id}>{loc.name}</option>))}
-              </select>
-              <select name="axis" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} defaultValue="">
-                <option value="">Eje (opcional — hereda de la campaña)</option>
-                {AXIS_OPTIONS.map((a) => (<option key={a} value={a}>{AXIS_LABEL[a]}</option>))}
-              </select>
-            </div>
-            <input name="category" placeholder="Categoría" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
-            <div className="grid gap-3 md:grid-cols-2">
-              <input type="number" name="amount" placeholder="Monto" min={1} className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
-              <input type="date" name="date" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
-            </div>
-            <select name="status" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} defaultValue="PLANNED">
-              <option value="PLANNED">Planificado</option>
-              <option value="COMMITTED">Comprometido</option>
-              <option value="PAID">Pagado</option>
-            </select>
-            <select name="vendorId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }}>
-              <option value="">Proveedor (opcional)</option>
-              {vendors.map((vendor) => (<option key={vendor.id} value={vendor.id}>{vendor.name}</option>))}
-            </select>
-            <textarea name="notes" placeholder="Notas" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} rows={2} />
-            <button type="submit" className="px-4 py-2 rounded-md" style={{ background: "var(--c-forest)", color: "#fff" }}>
-              Guardar gasto
-            </button>
-          </form>
+        <div className="bg-white rounded-lg overflow-hidden" style={{ border: "1px solid var(--line)" }}>
+          {tasksWithCost.length === 0 && (
+            <div className="px-4 py-3 text-sm" style={{ color: "var(--muted)" }}>Sin tareas con costo asignado.</div>
+          )}
+          {tasksWithCost.length > 0 && (
+            <>
+              <div className="grid text-[11px] px-4 py-2" style={{ gridTemplateColumns: "1.4fr 1fr 1fr 0.8fr", color: "var(--muted)", borderBottom: "1px solid var(--line)" }}>
+                <div>TAREA</div><div>CONTEXTO</div><div>FECHA</div><div>COSTO</div>
+              </div>
+              {tasksWithCost.map((t) => (
+                <div key={t.id} className="grid items-center px-4 py-3 text-sm" style={{ gridTemplateColumns: "1.4fr 1fr 1fr 0.8fr", borderBottom: "1px solid var(--line)" }}>
+                  <div style={{ color: "var(--ink)" }}>{t.title}</div>
+                  <div className="text-xs" style={{ color: "var(--muted)" }}>{t.campaign?.name ?? t.productionProject?.name ?? "Operativo"}</div>
+                  <div className="text-xs" style={{ color: "var(--muted)" }}>{t.dueDate ? t.dueDate.toLocaleDateString("es-CL") : "Sin fecha"}</div>
+                  <div style={{ color: "var(--ink)" }}>{fmt(t.cost ?? 0)}</div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       </div>
 
       <div>
-        <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Ejecución de campañas en el período</h2>
-        <div className="flex gap-3 flex-wrap">
-          <KPICard label="ASIGNADO" value={fmt(assigned)} accent="var(--c-forest)" />
-          <KPICard label="GASTADO" value={fmt(actual)} accent="var(--c-copper)" />
-          <KPICard label="COMPROMETIDO" value={fmt(committed)} accent="var(--c-warning)" />
-          <KPICard label="DISPONIBLE" value={fmt(available)} accent="var(--c-success)" />
+        <SectionHeader title="Gastos asociados a Producción" href="/production" />
+        <div className="flex gap-3 flex-wrap mb-3">
+          <KPICard label="TOTAL" value={fmt(productionCost)} accent="var(--c-copper)" />
+          <KPICard label="PROYECTOS CON PRESUPUESTO" value={projectsWithBudget.length} accent="var(--c-forest)" />
         </div>
-        <div className="mt-3">
-          <ProgressBar pct={ex.pct} color={ex.color} />
+        <div className="bg-white rounded-lg overflow-hidden" style={{ border: "1px solid var(--line)" }}>
+          {projectsWithBudget.length === 0 && (
+            <div className="px-4 py-3 text-sm" style={{ color: "var(--muted)" }}>Sin proyectos con presupuesto asignado.</div>
+          )}
+          {projectsWithBudget.length > 0 && (
+            <>
+              <div className="grid text-[11px] px-4 py-2" style={{ gridTemplateColumns: "1.4fr 1fr 1fr 0.8fr", color: "var(--muted)", borderBottom: "1px solid var(--line)" }}>
+                <div>PROYECTO</div><div>CAMPAÑA</div><div>ESTADO</div><div>PRESUPUESTO</div>
+              </div>
+              {projectsWithBudget.map((p) => (
+                <div key={p.id} className="grid items-center px-4 py-3 text-sm" style={{ gridTemplateColumns: "1.4fr 1fr 1fr 0.8fr", borderBottom: "1px solid var(--line)" }}>
+                  <div style={{ color: "var(--ink)" }}>{p.name}</div>
+                  <div className="text-xs" style={{ color: "var(--muted)" }}>{p.campaign?.name ?? "Grilla RRSS"}</div>
+                  <div className="text-xs" style={{ color: "var(--muted)" }}>{PROJECT_STATUS_LABEL[p.status] ?? p.status}</div>
+                  <div style={{ color: "var(--ink)" }}>{fmt(p.budgetAmount ?? 0)}</div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
+      </div>
+
+      <div>
+        <SectionHeader title="Gastos asociados a Campañas" href="/campaigns" />
+        <div className="flex gap-3 flex-wrap mb-3">
+          <KPICard label="TOTAL" value={fmt(campaignsCost)} accent="var(--c-copper)" />
+          <KPICard label="CAMPAÑAS CON PRESUPUESTO" value={campaignBudgetList.length} accent="var(--c-forest)" />
+        </div>
+        <div className="bg-white rounded-lg overflow-hidden" style={{ border: "1px solid var(--line)" }}>
+          {campaignBudgetList.length === 0 && (
+            <div className="px-4 py-3 text-sm" style={{ color: "var(--muted)" }}>Sin campañas con presupuesto asignado.</div>
+          )}
+          {campaignBudgetList.length > 0 && (
+            <>
+              <div className="grid text-[11px] px-4 py-2" style={{ gridTemplateColumns: "1.6fr 1fr 0.8fr", color: "var(--muted)", borderBottom: "1px solid var(--line)" }}>
+                <div>CAMPAÑA</div><div>ID</div><div>ASIGNADO</div>
+              </div>
+              {campaignBudgetList.map((c) => (
+                <Link
+                  key={c.code}
+                  href={`/campaigns/${c.code}`}
+                  className="grid items-center px-4 py-3 text-sm"
+                  style={{ gridTemplateColumns: "1.6fr 1fr 0.8fr", borderBottom: "1px solid var(--line)" }}
+                >
+                  <div style={{ color: "var(--ink)" }}>{c.name}</div>
+                  <div className="text-xs" style={{ color: "var(--muted)", fontFamily: "monospace" }}>{c.code}</div>
+                  <div style={{ color: "var(--ink)" }}>{fmt(c.total)}</div>
+                </Link>
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
+        <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Registrar gasto</h2>
+        <form action={createExpenseAction} className="grid gap-3 md:grid-cols-2">
+          <input type="hidden" name="redirectTo" value={redirectTo} />
+          <select name="businessUnitId" className="px-3 py-2 rounded-md md:col-span-2" style={{ border: "1px solid var(--line)" }} required>
+            <option value="">Unidad</option>
+            {businessUnits.map((unit) => (<option key={unit.id} value={unit.id}>{unit.name}</option>))}
+          </select>
+          <select name="campaignId" className="px-3 py-2 rounded-md md:col-span-2" style={{ border: "1px solid var(--line)" }}>
+            <option value="">Campaña (opcional — vacío = gasto directo de la matriz)</option>
+            {campaigns.map((campaign) => (<option key={campaign.id} value={campaign.id}>{campaign.name}</option>))}
+          </select>
+          <select name="locationId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }}>
+            <option value="">Local (opcional)</option>
+            {locations.map((loc) => (<option key={loc.id} value={loc.id}>{loc.name}</option>))}
+          </select>
+          <select name="axis" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} defaultValue="">
+            <option value="">Eje (opcional — hereda de la campaña)</option>
+            {AXIS_OPTIONS.map((a) => (<option key={a} value={a}>{AXIS_LABEL[a]}</option>))}
+          </select>
+          <input name="category" placeholder="Categoría" className="px-3 py-2 rounded-md md:col-span-2" style={{ border: "1px solid var(--line)" }} required />
+          <input type="number" name="amount" placeholder="Monto" min={1} className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
+          <input type="date" name="date" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
+          <select name="status" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} defaultValue="PLANNED">
+            <option value="PLANNED">Planificado</option>
+            <option value="COMMITTED">Comprometido</option>
+            <option value="PAID">Pagado</option>
+          </select>
+          <select name="vendorId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }}>
+            <option value="">Proveedor (opcional)</option>
+            {vendors.map((vendor) => (<option key={vendor.id} value={vendor.id}>{vendor.name}</option>))}
+          </select>
+          <textarea name="notes" placeholder="Notas" className="px-3 py-2 rounded-md md:col-span-2" style={{ border: "1px solid var(--line)" }} rows={2} />
+          <button type="submit" className="px-4 py-2 rounded-md md:col-span-2" style={{ background: "var(--c-forest)", color: "#fff" }}>
+            Guardar gasto
+          </button>
+        </form>
       </div>
 
       <div>
         <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Gasto por local</h2>
+        <form className="flex items-center gap-2 text-xs flex-wrap mb-3" style={{ color: "var(--muted)" }}>
+          Del <input type="date" name="from" defaultValue={searchParams.from ?? "2026-06-01"} className="px-2 py-1.5 rounded-md" style={{ border: "1px solid var(--line)" }} />
+          al <input type="date" name="to" defaultValue={searchParams.to ?? "2026-10-15"} className="px-2 py-1.5 rounded-md" style={{ border: "1px solid var(--line)" }} />
+          Eje
+          <select name="axis" defaultValue={axisFilter} className="px-2 py-1.5 rounded-md" style={{ border: "1px solid var(--line)" }}>
+            <option value="">Todos</option>
+            {AXIS_OPTIONS.map((a) => (<option key={a} value={a}>{AXIS_LABEL[a]}</option>))}
+          </select>
+          <button type="submit" className="px-3 py-1.5 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--ink)" }}>Filtrar</button>
+        </form>
         <div className="bg-white rounded-lg overflow-hidden" style={{ border: "1px solid var(--line)" }}>
           <div className="grid text-[11px] px-4 py-2" style={{ gridTemplateColumns: "1.5fr 1fr 1fr 1fr", color: "var(--muted)", borderBottom: "1px solid var(--line)" }}>
             <div>LOCAL</div><div>GASTADO</div><div>COMPROMETIDO</div><div>TOTAL</div>
@@ -286,96 +356,6 @@ export default async function BudgetPage({ searchParams }: { searchParams: { fro
               <div style={{ color: "var(--ink)" }}>{fmt(l.actual)}</div>
               <div style={{ color: "var(--muted)" }}>{fmt(l.committed)}</div>
               <div style={{ color: "var(--ink)" }}>{fmt(l.actual + l.committed)}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
-        <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Presupuestos en el período</h2>
-        <div className="space-y-3">
-          {budgets.map((budget) => (
-            <div key={budget.id} className="rounded-lg p-3" style={{ background: "#F7F5F0" }}>
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm" style={{ color: "var(--ink)" }}>{budget.businessUnit.name}</div>
-                  <div className="text-xs" style={{ color: "var(--muted)" }}>{budget.campaign?.name ?? "Sin campaña"}</div>
-                </div>
-                <form action={deleteBudgetAction} className="inline-block">
-                  <input type="hidden" name="id" value={budget.id} />
-                  <input type="hidden" name="redirectTo" value={redirectTo} />
-                  <button type="submit" className="text-[11px] px-2 py-1 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--c-danger)" }}>Borrar</button>
-                </form>
-              </div>
-              <form action={updateBudgetAction} className="mt-3 grid gap-2 md:grid-cols-4">
-                <input type="hidden" name="id" value={budget.id} />
-                <input type="hidden" name="redirectTo" value={redirectTo} />
-                <select name="businessUnitId" defaultValue={budget.businessUnitId} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
-                  {businessUnits.map((unit) => (<option key={unit.id} value={unit.id}>{unit.name}</option>))}
-                </select>
-                <select name="campaignId" defaultValue={budget.campaignId ?? ""} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
-                  <option value="">Sin campaña</option>
-                  {campaigns.map((campaign) => (<option key={campaign.id} value={campaign.id}>{campaign.name}</option>))}
-                </select>
-                <input type="number" name="periodYear" defaultValue={budget.periodYear} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
-                <input type="number" name="assignedAmount" defaultValue={budget.assignedAmount} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
-                <button type="submit" className="px-3 py-1.5 rounded-md md:col-span-4" style={{ background: "var(--c-forest)", color: "#fff" }}>Guardar presupuesto</button>
-              </form>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Gastos en el período</h2>
-        <div className="bg-white rounded-lg overflow-hidden" style={{ border: "1px solid var(--line)" }}>
-          <div className="grid text-[11px] px-4 py-2" style={{ gridTemplateColumns: "0.7fr 1fr 0.9fr 0.9fr 0.8fr 0.8fr", color: "var(--muted)", borderBottom: "1px solid var(--line)" }}>
-            <div>FECHA</div><div>CATEGORÍA</div><div>LOCAL</div><div>EJE</div><div>MONTO</div><div>ESTADO</div>
-          </div>
-          {expenses.map((e) => (
-            <div key={e.id} className="px-4 py-3 text-sm" style={{ borderBottom: "1px solid var(--line)" }}>
-              <div className="grid items-center gap-2" style={{ gridTemplateColumns: "0.7fr 1fr 0.9fr 0.9fr 0.8fr 0.8fr auto" }}>
-                <div style={{ color: "var(--muted)" }}>{e.date.toLocaleDateString("es-CL")}</div>
-                <div style={{ color: "var(--ink)" }}>{e.category}</div>
-                <div className="text-xs" style={{ color: "var(--muted)" }}>{e.location?.name ?? "—"}</div>
-                <div className="text-xs" style={{ color: "var(--muted)" }}>{AXIS_LABEL[e.axis ?? e.campaign?.axis ?? ""] ?? "—"}</div>
-                <div style={{ color: "var(--ink)" }}>{fmt(e.amount)}</div>
-                <div><Badge tone={EXPENSE_STATUS_TONE[e.status]}>{EXPENSE_STATUS_LABEL[e.status]}</Badge></div>
-                <form action={deleteExpenseAction}>
-                  <input type="hidden" name="id" value={e.id} />
-                  <input type="hidden" name="redirectTo" value={redirectTo} />
-                  <button type="submit" className="text-[11px] px-2 py-1 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--c-danger)" }}>Borrar</button>
-                </form>
-              </div>
-
-              <form action={updateExpenseAction} className="mt-3 grid gap-2 md:grid-cols-6" style={{ borderTop: "1px solid var(--line)", paddingTop: "0.75rem" }}>
-                <input type="hidden" name="id" value={e.id} />
-                <input type="hidden" name="redirectTo" value={redirectTo} />
-                <input type="date" name="date" defaultValue={new Date(e.date).toISOString().slice(0, 10)} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
-                <input name="category" defaultValue={e.category} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
-                <select name="locationId" defaultValue={e.locationId ?? ""} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
-                  <option value="">Sin local</option>
-                  {locations.map((loc) => (<option key={loc.id} value={loc.id}>{loc.name}</option>))}
-                </select>
-                <select name="axis" defaultValue={e.axis ?? ""} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
-                  <option value="">Sin eje / hereda</option>
-                  {AXIS_OPTIONS.map((a) => (<option key={a} value={a}>{AXIS_LABEL[a]}</option>))}
-                </select>
-                <input type="number" name="amount" defaultValue={e.amount} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
-                <select name="status" defaultValue={e.status} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
-                  <option value="PLANNED">Planificado</option>
-                  <option value="COMMITTED">Comprometido</option>
-                  <option value="PAID">Pagado</option>
-                </select>
-                <input type="hidden" name="businessUnitId" value={e.businessUnitId} />
-                <input type="hidden" name="campaignId" value={e.campaignId ?? ""} />
-                <input type="hidden" name="budgetId" value={e.budgetId ?? ""} />
-                <input type="hidden" name="vendorId" value={e.vendorId ?? ""} />
-                <textarea name="notes" defaultValue={e.notes ?? ""} className="px-2 py-1.5 rounded-md text-xs md:col-span-6" style={{ border: "1px solid var(--line)" }} rows={2} />
-                <button type="submit" className="px-3 py-1.5 rounded-md md:col-span-6" style={{ background: "var(--c-forest)", color: "#fff" }}>
-                  Guardar gasto
-                </button>
-              </form>
             </div>
           ))}
         </div>

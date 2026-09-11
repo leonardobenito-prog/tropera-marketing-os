@@ -105,7 +105,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: { m
             <option value="REVIEW">Revisión</option>
             <option value="DONE">Hecho</option>
           </select>
-          <input name="type" placeholder="Tipo de tarea" className="px-3 py-2 rounded-md md:col-span-2" style={{ border: "1px solid var(--line)" }} />
+          <input name="type" placeholder="Tipo de tarea" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} />
+          <input type="number" name="cost" placeholder="Costo (opcional)" min={0} className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} />
           <button type="submit" className="px-4 py-2 rounded-md md:col-span-2" style={{ background: "var(--c-forest)", color: "#fff" }}>
             Guardar tarea en calendario
           </button>
@@ -209,6 +210,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: { m
                         <option value="">Sin asignar</option>
                         {users.map((user) => (<option key={user.id} value={user.id}>{user.name}</option>))}
                       </select>
+                      <input type="number" name="cost" defaultValue={task.cost ?? ""} placeholder="Costo" min={0} className="px-2 py-1 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
                       <button type="submit" className="px-3 py-1.5 rounded-md text-[10px]" style={{ background: "var(--c-forest)", color: "#fff" }}>Guardar</button>
                     </form>
                   </div>

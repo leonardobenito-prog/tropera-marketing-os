@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { createTaskAction, createProductionProjectAction, updateTaskAction, deleteTaskAction, createBudgetAction } from "@/lib/actions/ops";
+import { createTaskAction, createProductionProjectAction, updateTaskAction, deleteTaskAction, createBudgetAction, deleteBudgetAction } from "@/lib/actions/ops";
 import { KPICard, money, execState, ProgressBar } from "@/components/ui";
 
 const FORMAT_PRESETS = ["Post", "Video", "Reel", "Historia", "Gráfica", "POP", "Mailing"];
@@ -53,6 +53,20 @@ export default async function CampaignDetailPage({ params }: { params: { code: s
 
         <div className="bg-white rounded-lg p-4 mt-4 max-w-md" style={{ border: "1px solid var(--line)" }}>
           <h3 className="text-base heading-title mb-3" style={{ color: "var(--ink)" }}>Asignar presupuesto</h3>
+          {campaign.budgets.length > 0 && (
+            <div className="space-y-1 mb-3">
+              {campaign.budgets.map((b) => (
+                <div key={b.id} className="flex items-center justify-between text-xs rounded-md px-2 py-1" style={{ background: "#F7F5F0" }}>
+                  <span style={{ color: "var(--ink)" }}>{b.periodYear} — {money(b.assignedAmount)}</span>
+                  <form action={deleteBudgetAction} className="inline-block">
+                    <input type="hidden" name="id" value={b.id} />
+                    <input type="hidden" name="redirectTo" value={`/campaigns/${campaign.campaignCode}`} />
+                    <button type="submit" style={{ color: "var(--c-danger)" }}>Borrar</button>
+                  </form>
+                </div>
+              ))}
+            </div>
+          )}
           <form action={createBudgetAction} className="grid gap-3 md:grid-cols-2">
             <input type="hidden" name="campaignId" value={campaign.id} />
             <input type="hidden" name="businessUnitId" value={campaign.businessUnitId} />
