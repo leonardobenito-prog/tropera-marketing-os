@@ -9,7 +9,6 @@ export const config = {
     "/calendar/:path*",
     "/campaigns/:path*",
     "/production/:path*",
-    "/advertising/:path*",
     "/budget/:path*",
     "/analytics/:path*",
     "/locations/:path*",

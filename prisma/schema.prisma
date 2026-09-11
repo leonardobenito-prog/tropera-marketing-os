@@ -154,6 +154,11 @@ enum BudgetAxis {
   DELIVERY
 }
 
+enum CampaignMediaType {
+  DIGITAL
+  ANALOG
+}
+
 model Campaign {
   id             String            @id @default(cuid())
   campaignCode   String            @unique // TRP-{YYYY}-{NNNN}, inmutable — ver §7
@@ -162,6 +167,7 @@ model Campaign {
   businessUnitId String
   objective      String?
   axis           BudgetAxis?
+  mediaType      CampaignMediaType?
   status         CampaignStatus    @default(DRAFT)
   startDate      DateTime
   endDate        DateTime

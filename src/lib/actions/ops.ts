@@ -12,6 +12,7 @@ function withParam(path: string, key: string, value: string) {
 }
 
 const axisSchema = z.enum(["RECOGNITION", "PROMOTIONS", "EVENTS", "DELIVERY"]).optional().or(z.literal(""));
+const mediaTypeSchema = z.enum(["DIGITAL", "ANALOG"]).optional().or(z.literal(""));
 
 const campaignSchema = z.object({
   name: z.string().min(2, "El nombre debe tener al menos 2 caracteres."),
@@ -19,6 +20,7 @@ const campaignSchema = z.object({
   businessUnitId: z.string().min(1, "Debes elegir una unidad."),
   objective: z.string().optional().or(z.literal("")),
   axis: axisSchema,
+  mediaType: mediaTypeSchema,
   status: z.enum(["DRAFT", "ACTIVE", "PAUSED", "COMPLETED", "CANCELLED"]),
   startDate: z.string().min(1, "La fecha de inicio es obligatoria."),
   endDate: z.string().min(1, "La fecha de término es obligatoria."),
@@ -90,34 +92,6 @@ const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Debes ingresar tu contraseña actual."),
   newPassword: z.string().min(8, "La nueva contraseña debe tener al menos 8 caracteres."),
   confirmPassword: z.string().min(1, "Debes confirmar la nueva contraseña."),
-});
-
-const adAccountSchema = z.object({
-  id: z.string().min(1),
-  platformId: z.string().min(1),
-  businessUnitId: z.string().min(1),
-  externalAccountId: z.string().trim().min(1, "Debes indicar el ID externo."),
-});
-
-const advertisingSpaceSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().trim().min(2, "El nombre es obligatorio."),
-  locationId: z.string().min(1, "Debes elegir una ubicación."),
-  typeId: z.string().min(1, "Debes elegir un tipo."),
-  dimensions: z.string().optional().or(z.literal("")),
-  status: z.enum(["AVAILABLE", "IN_USE", "RESERVED", "MAINTENANCE"]).default("AVAILABLE"),
-  estimatedCost: z.coerce.number().min(0).optional().or(z.literal("")),
-});
-
-const physicalPlacementSchema = z.object({
-  id: z.string().min(1),
-  campaignId: z.string().min(1, "Debes elegir una campaña."),
-  advertisingSpaceId: z.string().min(1, "Debes elegir un espacio."),
-  installDate: z.string().optional().or(z.literal("")),
-  removalDate: z.string().optional().or(z.literal("")),
-  cost: z.coerce.number().min(0).optional().or(z.literal("")),
-  status: z.string().default("PLANNED"),
-  photoUrl: z.string().optional().or(z.literal("")),
 });
 
 export async function createTeamMemberAction(formData: FormData) {
@@ -223,119 +197,6 @@ export async function updateMyPasswordAction(formData: FormData) {
   redirect("/settings?success=password-updated");
 }
 
-export async function updateAdAccountAction(formData: FormData) {
-  await requireRole(["ADMIN", "MARKETING_MANAGER"]);
-
-  const payload = adAccountSchema.parse({
-    id: formData.get("id"),
-    platformId: formData.get("platformId"),
-    businessUnitId: formData.get("businessUnitId"),
-    externalAccountId: formData.get("externalAccountId"),
-  });
-
-  await prisma.adAccount.update({
-    where: { id: payload.id },
-    data: {
-      platformId: payload.platformId,
-      businessUnitId: payload.businessUnitId,
-      externalAccountId: payload.externalAccountId,
-    },
-  });
-
-  revalidatePath("/advertising");
-  redirect("/advertising?success=ad-account-updated");
-}
-
-export async function deleteAdAccountAction(formData: FormData) {
-  await requireRole(["ADMIN", "MARKETING_MANAGER"]);
-
-  const id = String(formData.get("id"));
-  await prisma.adAccount.delete({ where: { id } });
-  revalidatePath("/advertising");
-  redirect("/advertising?success=ad-account-deleted");
-}
-
-export async function updateAdvertisingSpaceAction(formData: FormData) {
-  await requireRole(["ADMIN", "MARKETING_MANAGER"]);
-
-  const payload = advertisingSpaceSchema.parse({
-    id: formData.get("id"),
-    name: formData.get("name"),
-    locationId: formData.get("locationId"),
-    typeId: formData.get("typeId"),
-    dimensions: formData.get("dimensions") ?? "",
-    status: formData.get("status") ?? "AVAILABLE",
-    estimatedCost: formData.get("estimatedCost") ?? "",
-  });
-
-  await prisma.advertisingSpace.update({
-    where: { id: payload.id },
-    data: {
-      name: payload.name,
-      locationId: payload.locationId,
-      typeId: payload.typeId,
-      dimensions: payload.dimensions || null,
-      status: payload.status,
-      estimatedCost: payload.estimatedCost ? Number(payload.estimatedCost) : null,
-    },
-  });
-
-  revalidatePath("/advertising");
-  redirect("/advertising?success=space-updated");
-}
-
-export async function deleteAdvertisingSpaceAction(formData: FormData) {
-  await requireRole(["ADMIN", "MARKETING_MANAGER"]);
-
-  const id = String(formData.get("id"));
-  await prisma.$transaction([
-    prisma.physicalAdPlacement.deleteMany({ where: { advertisingSpaceId: id } }),
-    prisma.advertisingSpace.delete({ where: { id } }),
-  ]);
-  revalidatePath("/advertising");
-  redirect("/advertising?success=space-deleted");
-}
-
-export async function updatePhysicalPlacementAction(formData: FormData) {
-  await requireRole(["ADMIN", "MARKETING_MANAGER"]);
-
-  const payload = physicalPlacementSchema.parse({
-    id: formData.get("id"),
-    campaignId: formData.get("campaignId") ?? "",
-    advertisingSpaceId: formData.get("advertisingSpaceId"),
-    installDate: formData.get("installDate") ?? "",
-    removalDate: formData.get("removalDate") ?? "",
-    cost: formData.get("cost") ?? "",
-    status: formData.get("status") ?? "PLANNED",
-    photoUrl: formData.get("photoUrl") ?? "",
-  });
-
-  await prisma.physicalAdPlacement.update({
-    where: { id: payload.id },
-    data: {
-      campaignId: payload.campaignId,
-      advertisingSpaceId: payload.advertisingSpaceId,
-      installDate: payload.installDate ? new Date(payload.installDate) : null,
-      removalDate: payload.removalDate ? new Date(payload.removalDate) : null,
-      cost: payload.cost ? Number(payload.cost) : null,
-      status: payload.status,
-      photoUrl: payload.photoUrl || null,
-    },
-  });
-
-  revalidatePath("/advertising");
-  redirect("/advertising?success=placement-updated");
-}
-
-export async function deletePhysicalPlacementAction(formData: FormData) {
-  await requireRole(["ADMIN", "MARKETING_MANAGER"]);
-
-  const id = String(formData.get("id"));
-  await prisma.physicalAdPlacement.delete({ where: { id } });
-  revalidatePath("/advertising");
-  redirect("/advertising?success=placement-deleted");
-}
-
 export async function createCampaignAction(formData: FormData) {
   await requireRole(["ADMIN", "MARKETING_MANAGER"]);
 
@@ -347,6 +208,7 @@ export async function createCampaignAction(formData: FormData) {
     businessUnitId: formData.get("businessUnitId"),
     objective: formData.get("objective") ?? "",
     axis: formData.get("axis") ?? "",
+    mediaType: formData.get("mediaType") ?? "",
     status: formData.get("status") ?? "DRAFT",
     startDate: formData.get("startDate"),
     endDate: formData.get("endDate"),
@@ -360,6 +222,7 @@ export async function createCampaignAction(formData: FormData) {
       businessUnitId: payload.businessUnitId,
       objective: payload.objective || null,
       axis: payload.axis || null,
+      mediaType: payload.mediaType || null,
       status: payload.status,
       startDate: new Date(payload.startDate),
       endDate: new Date(payload.endDate),
@@ -383,6 +246,7 @@ export async function updateCampaignAction(formData: FormData) {
     businessUnitId: formData.get("businessUnitId"),
     objective: formData.get("objective") ?? "",
     axis: formData.get("axis") ?? "",
+    mediaType: formData.get("mediaType") ?? "",
     status: formData.get("status") ?? "DRAFT",
     startDate: formData.get("startDate"),
     endDate: formData.get("endDate"),
@@ -400,6 +264,7 @@ export async function updateCampaignAction(formData: FormData) {
       businessUnitId: payload.businessUnitId,
       objective: payload.objective || null,
       axis: payload.axis || null,
+      mediaType: payload.mediaType || null,
       status: payload.status,
       startDate: new Date(payload.startDate),
       endDate: new Date(payload.endDate),

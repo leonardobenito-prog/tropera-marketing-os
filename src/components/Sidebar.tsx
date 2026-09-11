@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
-  LayoutDashboard, CalendarCheck, CalendarDays, Megaphone, Factory, Radio,
+  LayoutDashboard, CalendarCheck, CalendarDays, Megaphone, Factory,
   Wallet, BarChart3, MapPin, Users, Lightbulb, FileText, Settings, LogOut,
 } from "lucide-react";
 
@@ -15,7 +15,6 @@ const NAV = [
   { href: "/calendar", label: "Calendario", icon: CalendarDays },
   { href: "/campaigns", label: "Campañas", icon: Megaphone },
   { href: "/production", label: "Producción", icon: Factory },
-  { href: "/advertising", label: "Publicidad", icon: Radio },
   { href: "/budget", label: "Presupuesto", icon: Wallet },
   { href: "/analytics", label: "Analítica Digital", icon: BarChart3 },
   { href: "/locations", label: "Locales", icon: MapPin },

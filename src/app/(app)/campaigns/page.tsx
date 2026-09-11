@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { createCampaignAction, updateCampaignAction, deleteCampaignAction } from "@/lib/actions/ops";
 import { Badge, ProgressBar, execState } from "@/components/ui";
+import type { Prisma, CampaignMediaType } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -17,9 +18,25 @@ const AXIS_LABEL: Record<string, string> = {
   RECOGNITION: "Reconocimiento", PROMOTIONS: "Promociones", EVENTS: "Eventos", DELIVERY: "Delivery",
 };
 
-export default async function CampaignsPage() {
+const MEDIA_TYPE_LABEL: Record<string, string> = { DIGITAL: "Digital", ANALOG: "Análoga" };
+const MEDIA_TYPE_TONE: Record<string, "forest" | "warning"> = { DIGITAL: "forest", ANALOG: "warning" };
+const MEDIA_TYPE_OPTIONS = ["DIGITAL", "ANALOG"] as const;
+
+// Filtro por ventana de tiempo y tipo de medio vía querystring: /campaigns?from=2026-09-01&to=2026-09-30&mediaType=DIGITAL
+export default async function CampaignsPage({ searchParams }: { searchParams: { from?: string; to?: string; mediaType?: string } }) {
+  const from = searchParams.from ? new Date(searchParams.from) : null;
+  const to = searchParams.to ? new Date(searchParams.to) : null;
+  const mediaTypeFilter = MEDIA_TYPE_OPTIONS.includes(searchParams.mediaType as (typeof MEDIA_TYPE_OPTIONS)[number]) ? searchParams.mediaType : "";
+
+  const where: Prisma.CampaignWhereInput = {
+    ...(from ? { endDate: { gte: from } } : {}),
+    ...(to ? { startDate: { lte: to } } : {}),
+    ...(mediaTypeFilter ? { mediaType: mediaTypeFilter as CampaignMediaType } : {}),
+  };
+
   const [campaigns, businessUnits, users] = await Promise.all([
     prisma.campaign.findMany({
+      where,
       include: { businessUnit: true, budgets: true, expenses: true },
       orderBy: { startDate: "desc" },
     }),
@@ -32,6 +49,20 @@ export default async function CampaignsPage() {
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl heading-title" style={{ color: "var(--ink)" }}>Campañas</h1>
       </div>
+
+      <form className="flex items-center gap-2 text-xs flex-wrap" style={{ color: "var(--muted)" }}>
+        Del <input type="date" name="from" defaultValue={searchParams.from ?? ""} className="px-2 py-1.5 rounded-md" style={{ border: "1px solid var(--line)" }} />
+        al <input type="date" name="to" defaultValue={searchParams.to ?? ""} className="px-2 py-1.5 rounded-md" style={{ border: "1px solid var(--line)" }} />
+        Tipo
+        <select name="mediaType" defaultValue={mediaTypeFilter} className="px-2 py-1.5 rounded-md" style={{ border: "1px solid var(--line)" }}>
+          <option value="">Todos</option>
+          {MEDIA_TYPE_OPTIONS.map((m) => (<option key={m} value={m}>{MEDIA_TYPE_LABEL[m]}</option>))}
+        </select>
+        <button type="submit" className="px-3 py-1.5 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--ink)" }}>Filtrar</button>
+        {(searchParams.from || searchParams.to || mediaTypeFilter) && (
+          <Link href="/campaigns" className="px-3 py-1.5 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--muted)" }}>Limpiar</Link>
+        )}
+      </form>
 
       <div className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
         <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Crear campaña</h2>
@@ -60,6 +91,10 @@ export default async function CampaignsPage() {
             <option value="EVENTS">Eventos</option>
             <option value="DELIVERY">Delivery</option>
           </select>
+          <select name="mediaType" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} defaultValue="">
+            <option value="">Digital o Análoga (opcional)</option>
+            {MEDIA_TYPE_OPTIONS.map((m) => (<option key={m} value={m}>{MEDIA_TYPE_LABEL[m]}</option>))}
+          </select>
           <textarea name="objective" placeholder="Objetivo" className="px-3 py-2 rounded-md md:col-span-2" style={{ border: "1px solid var(--line)" }} rows={3} />
           <select name="status" className="px-3 py-2 rounded-md md:col-span-2" style={{ border: "1px solid var(--line)" }} defaultValue="DRAFT">
             <option value="DRAFT">Borrador</option>
@@ -75,9 +110,12 @@ export default async function CampaignsPage() {
       </div>
 
       <div className="bg-white rounded-lg overflow-hidden" style={{ border: "1px solid var(--line)" }}>
-        <div className="grid text-[11px] px-4 py-2" style={{ gridTemplateColumns: "1.4fr 1fr 0.9fr 1fr 1.4fr 0.8fr", color: "var(--muted)", borderBottom: "1px solid var(--line)" }}>
-          <div>CAMPAÑA</div><div>UNIDAD</div><div>EJE</div><div>ESTADO</div><div>EJECUCIÓN</div><div>ID</div>
+        <div className="grid text-[11px] px-4 py-2" style={{ gridTemplateColumns: "1.3fr 1fr 0.8fr 0.8fr 1fr 1.3fr 0.8fr", color: "var(--muted)", borderBottom: "1px solid var(--line)" }}>
+          <div>CAMPAÑA</div><div>UNIDAD</div><div>EJE</div><div>MEDIO</div><div>ESTADO</div><div>EJECUCIÓN</div><div>ID</div>
         </div>
+        {campaigns.length === 0 && (
+          <div className="px-4 py-3 text-sm" style={{ color: "var(--muted)" }}>Sin campañas en este filtro.</div>
+        )}
         {campaigns.map((c) => {
           const assigned = c.budgets.reduce((s, b) => s + b.assignedAmount, 0);
           const actual = c.expenses.filter((e) => e.status === "PAID").reduce((s, e) => s + e.amount, 0);
@@ -85,7 +123,7 @@ export default async function CampaignsPage() {
           const ex = execState(assigned, actual, committed);
           return (
             <div key={c.id} className="px-4 py-3 text-sm" style={{ borderBottom: "1px solid var(--line)" }}>
-              <div className="grid items-center gap-3" style={{ gridTemplateColumns: "1.4fr 1fr 0.9fr 1fr 1.4fr 0.8fr auto" }}>
+              <div className="grid items-center gap-3" style={{ gridTemplateColumns: "1.3fr 1fr 0.8fr 0.8fr 1fr 1.3fr 0.8fr auto" }}>
                 <Link href={`/campaigns/${c.campaignCode}`} className="contents">
                   <div>
                     <div style={{ color: "var(--ink)" }}>{c.name}</div>
@@ -95,6 +133,7 @@ export default async function CampaignsPage() {
                   </div>
                   <div style={{ color: "var(--ink)" }}>{c.businessUnit.name}</div>
                   <div className="text-xs" style={{ color: "var(--muted)" }}>{c.axis ? AXIS_LABEL[c.axis] : "—"}</div>
+                  <div>{c.mediaType ? <Badge tone={MEDIA_TYPE_TONE[c.mediaType]}>{MEDIA_TYPE_LABEL[c.mediaType]}</Badge> : <span className="text-xs" style={{ color: "var(--muted)" }}>—</span>}</div>
                   <div><Badge tone={STATUS_TONE[c.status] || "neutral"}>{STATUS_LABEL[c.status] || c.status}</Badge></div>
                   <div>
                     <div className="flex items-center justify-between text-xs mb-1">
@@ -113,7 +152,7 @@ export default async function CampaignsPage() {
                 </div>
               </div>
 
-              <form action={updateCampaignAction} className="mt-3 grid gap-2 md:grid-cols-3" style={{ borderTop: "1px solid var(--line)", paddingTop: "0.75rem" }}>
+              <form action={updateCampaignAction} className="mt-3 grid gap-2 md:grid-cols-4" style={{ borderTop: "1px solid var(--line)", paddingTop: "0.75rem" }}>
                 <input type="hidden" name="id" value={c.id} />
                 <input type="hidden" name="campaignCode" value={c.campaignCode} />
                 <input type="hidden" name="redirectTo" value="/campaigns" />
@@ -141,8 +180,12 @@ export default async function CampaignsPage() {
                   <option value="EVENTS">Eventos</option>
                   <option value="DELIVERY">Delivery</option>
                 </select>
-                <textarea name="objective" defaultValue={c.objective ?? ""} className="px-2 py-1.5 rounded-md text-xs md:col-span-3" style={{ border: "1px solid var(--line)" }} rows={2} />
-                <button type="submit" className="px-3 py-1.5 rounded-md md:col-span-3" style={{ background: "var(--c-forest)", color: "#fff" }}>
+                <select name="mediaType" defaultValue={c.mediaType ?? ""} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
+                  <option value="">Digital o Análoga (opcional)</option>
+                  {MEDIA_TYPE_OPTIONS.map((m) => (<option key={m} value={m}>{MEDIA_TYPE_LABEL[m]}</option>))}
+                </select>
+                <textarea name="objective" defaultValue={c.objective ?? ""} className="px-2 py-1.5 rounded-md text-xs md:col-span-4" style={{ border: "1px solid var(--line)" }} rows={2} />
+                <button type="submit" className="px-3 py-1.5 rounded-md md:col-span-4" style={{ background: "var(--c-forest)", color: "#fff" }}>
                   Guardar cambios
                 </button>
               </form>
