@@ -41,6 +41,7 @@ const projectSchema = z.object({
   name: z.string().min(2, "El nombre del proyecto es obligatorio."),
   campaignId: z.string().optional().or(z.literal("")),
   format: z.string().min(1, "El formato es obligatorio.").default("Post"),
+  formatOther: z.string().optional().or(z.literal("")),
   status: z.enum(["BACKLOG", "IN_PRODUCTION", "REVIEW", "APPROVED", "PUBLISHED", "IMPLEMENTED"]).default("BACKLOG"),
   assigneeId: z.string().optional().or(z.literal("")),
   dueDate: z.string().optional().or(z.literal("")),
@@ -577,6 +578,13 @@ export async function deleteTaskAction(formData: FormData) {
   redirect(withParam(redirectTo || fallback, "success", "task-deleted"));
 }
 
+// El <select> de formato ofrece presets + "Otro"; si se elige "Otro" se usa
+// el texto libre de formatOther como formato real guardado.
+function resolveFormat(format: string, formatOther?: string) {
+  if (format === "Otro" && formatOther?.trim()) return formatOther.trim();
+  return format;
+}
+
 export async function createProductionProjectAction(formData: FormData) {
   await requireRole(["ADMIN", "MARKETING_MANAGER", "TEAM_MEMBER"]);
 
@@ -586,6 +594,7 @@ export async function createProductionProjectAction(formData: FormData) {
     name: formData.get("name"),
     campaignId: formData.get("campaignId") ?? "",
     format: formData.get("format") || "Post",
+    formatOther: formData.get("formatOther") ?? "",
     status: formData.get("status") ?? "BACKLOG",
     assigneeId: formData.get("assigneeId") ?? "",
     dueDate: formData.get("dueDate") ?? "",
@@ -598,7 +607,7 @@ export async function createProductionProjectAction(formData: FormData) {
     data: {
       name: payload.name,
       campaignId: payload.campaignId || null,
-      format: payload.format,
+      format: resolveFormat(payload.format, payload.formatOther),
       status: payload.status,
       assigneeId: payload.assigneeId || null,
       dueDate: payload.dueDate ? new Date(payload.dueDate) : null,
@@ -634,6 +643,7 @@ export async function updateProductionProjectAction(formData: FormData) {
     name: formData.get("name"),
     campaignId: formData.get("campaignId") ?? current.campaignId ?? "",
     format: formData.get("format") || current.format,
+    formatOther: formData.get("formatOther") ?? "",
     status: formData.get("status") ?? current.status,
     assigneeId: formData.get("assigneeId") ?? current.assigneeId ?? "",
     dueDate: formData.get("dueDate") ?? (current.dueDate ? current.dueDate.toISOString().slice(0, 10) : ""),
@@ -647,7 +657,7 @@ export async function updateProductionProjectAction(formData: FormData) {
     data: {
       name: payload.name,
       campaignId: payload.campaignId || null,
-      format: payload.format,
+      format: resolveFormat(payload.format, payload.formatOther),
       status: payload.status,
       assigneeId: payload.assigneeId || null,
       dueDate: payload.dueDate ? new Date(payload.dueDate) : null,

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { createTaskAction, createProductionProjectAction, updateTaskAction, deleteTaskAction, createBudgetAction } from "@/lib/actions/ops";
 import { KPICard, money, execState, ProgressBar } from "@/components/ui";
 
-const FORMAT_OPTIONS = ["Post", "Video", "Reel", "Historia", "Gráfica", "POP", "Mailing", "Otro"];
+const FORMAT_PRESETS = ["Post", "Video", "Reel", "Historia", "Gráfica", "POP", "Mailing"];
 
 export const dynamic = "force-dynamic";
 
@@ -66,10 +66,6 @@ export default async function CampaignDetailPage({ params }: { params: { code: s
         </div>
       </div>
 
-      <datalist id="format-options">
-        {FORMAT_OPTIONS.map((f) => (<option key={f} value={f} />))}
-      </datalist>
-
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
           <h3 className="text-base heading-title mb-3" style={{ color: "var(--ink)" }}>Agregar tarea</h3>
@@ -109,7 +105,13 @@ export default async function CampaignDetailPage({ params }: { params: { code: s
           <form action={createProductionProjectAction} className="grid gap-3">
             <input type="hidden" name="campaignId" value={campaign.id} />
             <input name="name" placeholder="Nombre del proyecto" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
-            <input name="format" list="format-options" placeholder="Formato (Post, Video, Reel...)" defaultValue="Post" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
+            <div className="grid gap-3 md:grid-cols-2">
+              <select name="format" defaultValue="Post" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required>
+                {FORMAT_PRESETS.map((f) => (<option key={f} value={f}>{f}</option>))}
+                <option value="Otro">Otro</option>
+              </select>
+              <input name="formatOther" placeholder="Especifica si es 'Otro'" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} />
+            </div>
             <select name="assigneeId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }}>
               <option value="">Responsable (opcional)</option>
               {users.map((user) => (<option key={user.id} value={user.id}>{user.name}</option>))}

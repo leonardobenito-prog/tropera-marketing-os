@@ -38,7 +38,7 @@ const TASK_STATUS_TONE: Record<string, "neutral" | "warning" | "success"> = {
   DONE: "success",
 };
 
-const FORMAT_OPTIONS = ["Post", "Video", "Reel", "Historia", "Gráfica", "POP", "Mailing", "Otro"];
+const FORMAT_PRESETS = ["Post", "Video", "Reel", "Historia", "Gráfica", "POP", "Mailing"];
 
 // "Grilla RRSS" — bucket para proyectos que no corresponden a ninguna campaña.
 const NO_CAMPAIGN_VALUE = "";
@@ -81,10 +81,6 @@ export default async function ProductionPage() {
         </h1>
       </div>
 
-      <datalist id="format-options">
-        {FORMAT_OPTIONS.map((f) => (<option key={f} value={f} />))}
-      </datalist>
-
       <div className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
         <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Crear proyecto</h2>
         <form action={createProductionProjectAction} className="grid gap-3 md:grid-cols-3">
@@ -94,7 +90,13 @@ export default async function ProductionPage() {
             <option value={NO_CAMPAIGN_VALUE}>{NO_CAMPAIGN_LABEL}</option>
             {campaigns.map((campaign) => (<option key={campaign.id} value={campaign.id}>{campaign.name}</option>))}
           </select>
-          <input name="format" list="format-options" placeholder="Formato (Post, Video, Reel...)" defaultValue="Post" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
+          <div className="grid gap-3 md:grid-cols-2">
+            <select name="format" defaultValue="Post" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required>
+              {FORMAT_PRESETS.map((f) => (<option key={f} value={f}>{f}</option>))}
+              <option value="Otro">Otro</option>
+            </select>
+            <input name="formatOther" placeholder="Especifica si es 'Otro'" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} />
+          </div>
           <select name="assigneeId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }}>
             <option value="">Responsable (opcional)</option>
             {users.map((user) => (<option key={user.id} value={user.id}>{user.name}</option>))}
@@ -122,6 +124,7 @@ export default async function ProductionPage() {
       <div className="space-y-4">
         {projects.map((project) => {
           const stageIndex = STATUS_STAGES.findIndex((s) => s.key === project.status);
+          const isPresetFormat = FORMAT_PRESETS.includes(project.format);
           return (
             <div key={project.id} className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -216,7 +219,11 @@ export default async function ProductionPage() {
                     <option value={NO_CAMPAIGN_VALUE}>{NO_CAMPAIGN_LABEL}</option>
                     {campaigns.map((campaign) => (<option key={campaign.id} value={campaign.id}>{campaign.name}</option>))}
                   </select>
-                  <input name="format" list="format-options" defaultValue={project.format} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
+                  <select name="format" defaultValue={isPresetFormat ? project.format : "Otro"} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
+                    {FORMAT_PRESETS.map((f) => (<option key={f} value={f}>{f}</option>))}
+                    <option value="Otro">Otro</option>
+                  </select>
+                  <input name="formatOther" defaultValue={isPresetFormat ? "" : project.format} placeholder="Especifica si es 'Otro'" className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
                   <select name="assigneeId" defaultValue={project.assigneeId ?? ""} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
                     <option value="">Sin asignar</option>
                     {users.map((user) => (<option key={user.id} value={user.id}>{user.name}</option>))}
