@@ -13,6 +13,10 @@ const STATUS_TONE: Record<string, "success" | "warning" | "neutral"> = {
   ACTIVE: "success", COMPLETED: "success", DRAFT: "neutral", PAUSED: "warning", CANCELLED: "neutral",
 };
 
+const AXIS_LABEL: Record<string, string> = {
+  RECOGNITION: "Reconocimiento", PROMOTIONS: "Promociones", EVENTS: "Eventos", DELIVERY: "Delivery",
+};
+
 export default async function CampaignsPage() {
   const [campaigns, businessUnits, users] = await Promise.all([
     prisma.campaign.findMany({
@@ -49,6 +53,13 @@ export default async function CampaignsPage() {
           </select>
           <input type="date" name="startDate" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
           <input type="date" name="endDate" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} required />
+          <select name="axis" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} defaultValue="">
+            <option value="">Eje (opcional)</option>
+            <option value="RECOGNITION">Reconocimiento</option>
+            <option value="PROMOTIONS">Promociones</option>
+            <option value="EVENTS">Eventos</option>
+            <option value="DELIVERY">Delivery</option>
+          </select>
           <textarea name="objective" placeholder="Objetivo" className="px-3 py-2 rounded-md md:col-span-2" style={{ border: "1px solid var(--line)" }} rows={3} />
           <select name="status" className="px-3 py-2 rounded-md md:col-span-2" style={{ border: "1px solid var(--line)" }} defaultValue="DRAFT">
             <option value="DRAFT">Borrador</option>
@@ -64,8 +75,8 @@ export default async function CampaignsPage() {
       </div>
 
       <div className="bg-white rounded-lg overflow-hidden" style={{ border: "1px solid var(--line)" }}>
-        <div className="grid text-[11px] px-4 py-2" style={{ gridTemplateColumns: "1.6fr 1fr 1fr 1.4fr 0.8fr", color: "var(--muted)", borderBottom: "1px solid var(--line)" }}>
-          <div>CAMPAÑA</div><div>UNIDAD</div><div>ESTADO</div><div>EJECUCIÓN</div><div>ID</div>
+        <div className="grid text-[11px] px-4 py-2" style={{ gridTemplateColumns: "1.4fr 1fr 0.9fr 1fr 1.4fr 0.8fr", color: "var(--muted)", borderBottom: "1px solid var(--line)" }}>
+          <div>CAMPAÑA</div><div>UNIDAD</div><div>EJE</div><div>ESTADO</div><div>EJECUCIÓN</div><div>ID</div>
         </div>
         {campaigns.map((c) => {
           const assigned = c.budgets.reduce((s, b) => s + b.assignedAmount, 0);
@@ -74,7 +85,7 @@ export default async function CampaignsPage() {
           const ex = execState(assigned, actual, committed);
           return (
             <div key={c.id} className="px-4 py-3 text-sm" style={{ borderBottom: "1px solid var(--line)" }}>
-              <div className="grid items-center gap-3" style={{ gridTemplateColumns: "1.6fr 1fr 1fr 1.4fr 0.8fr auto" }}>
+              <div className="grid items-center gap-3" style={{ gridTemplateColumns: "1.4fr 1fr 0.9fr 1fr 1.4fr 0.8fr auto" }}>
                 <Link href={`/campaigns/${c.campaignCode}`} className="contents">
                   <div>
                     <div style={{ color: "var(--ink)" }}>{c.name}</div>
@@ -83,6 +94,7 @@ export default async function CampaignsPage() {
                     </div>
                   </div>
                   <div style={{ color: "var(--ink)" }}>{c.businessUnit.name}</div>
+                  <div className="text-xs" style={{ color: "var(--muted)" }}>{c.axis ? AXIS_LABEL[c.axis] : "—"}</div>
                   <div><Badge tone={STATUS_TONE[c.status] || "neutral"}>{STATUS_LABEL[c.status] || c.status}</Badge></div>
                   <div>
                     <div className="flex items-center justify-between text-xs mb-1">
@@ -121,6 +133,13 @@ export default async function CampaignsPage() {
                 <select name="ownerId" defaultValue={c.ownerId ?? ""} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
                   <option value="">Sin responsable</option>
                   {users.map((user) => (<option key={user.id} value={user.id}>{user.name}</option>))}
+                </select>
+                <select name="axis" defaultValue={c.axis ?? ""} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
+                  <option value="">Eje (opcional)</option>
+                  <option value="RECOGNITION">Reconocimiento</option>
+                  <option value="PROMOTIONS">Promociones</option>
+                  <option value="EVENTS">Eventos</option>
+                  <option value="DELIVERY">Delivery</option>
                 </select>
                 <textarea name="objective" defaultValue={c.objective ?? ""} className="px-2 py-1.5 rounded-md text-xs md:col-span-3" style={{ border: "1px solid var(--line)" }} rows={2} />
                 <button type="submit" className="px-3 py-1.5 rounded-md md:col-span-3" style={{ background: "var(--c-forest)", color: "#fff" }}>

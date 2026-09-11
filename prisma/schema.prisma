@@ -67,6 +67,7 @@ model Location {
   businessUnit   BusinessUnit?     @relation(fields: [businessUnitId], references: [id])
   businessUnitId String?
   spaces         AdvertisingSpace[]
+  expenses       Expense[]
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 }
@@ -144,6 +145,14 @@ enum CampaignStatus {
   CANCELLED
 }
 
+// Eje estratégico de la campaña — usado para asignar/filtrar presupuesto (§ matriz presupuestaria).
+enum BudgetAxis {
+  RECOGNITION
+  PROMOTIONS
+  EVENTS
+  DELIVERY
+}
+
 model Campaign {
   id             String            @id @default(cuid())
   campaignCode   String            @unique // TRP-{YYYY}-{NNNN}, inmutable — ver §7
@@ -151,6 +160,7 @@ model Campaign {
   businessUnit   BusinessUnit      @relation(fields: [businessUnitId], references: [id])
   businessUnitId String
   objective      String?
+  axis           BudgetAxis?
   status         CampaignStatus    @default(DRAFT)
   startDate      DateTime
   endDate        DateTime
@@ -360,6 +370,22 @@ model Budget {
   @@index([businessUnitId, periodYear])
 }
 
+// Matriz presupuestaria — pool general mes a mes, no dividido por unidad ni local.
+// Asignar presupuesto a una campaña (Budget.campaignId) y registrar un gasto sin
+// campaña descuentan de este total (calculado en la capa de aplicación, nunca
+// guardado — mismo criterio que Budget.available, ver más arriba).
+model BudgetMatrixEntry {
+  id          String   @id @default(cuid())
+  periodYear  Int
+  periodMonth Int
+  amount      Int
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([periodYear, periodMonth])
+}
+
 enum ExpenseStatus {
   PLANNED
   COMMITTED
@@ -374,6 +400,9 @@ model Expense {
   businessUnitId String
   budget         Budget?       @relation(fields: [budgetId], references: [id])
   budgetId       String?
+  location       Location?     @relation(fields: [locationId], references: [id])
+  locationId     String?
+  axis           BudgetAxis?
   amount         Int
   category       String
   vendor         Vendor?       @relation(fields: [vendorId], references: [id])
@@ -386,6 +415,7 @@ model Expense {
 
   @@index([campaignId])
   @@index([date])
+  @@index([locationId])
 }
 
 model Vendor {

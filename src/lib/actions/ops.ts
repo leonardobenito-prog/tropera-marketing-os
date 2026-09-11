@@ -11,11 +11,14 @@ function withParam(path: string, key: string, value: string) {
   return `${path}${path.includes("?") ? "&" : "?"}${key}=${value}`;
 }
 
+const axisSchema = z.enum(["RECOGNITION", "PROMOTIONS", "EVENTS", "DELIVERY"]).optional().or(z.literal(""));
+
 const campaignSchema = z.object({
   name: z.string().min(2, "El nombre debe tener al menos 2 caracteres."),
   campaignCode: z.string().min(2, "El código es obligatorio."),
   businessUnitId: z.string().min(1, "Debes elegir una unidad."),
   objective: z.string().optional().or(z.literal("")),
+  axis: axisSchema,
   status: z.enum(["DRAFT", "ACTIVE", "PAUSED", "COMPLETED", "CANCELLED"]),
   startDate: z.string().min(1, "La fecha de inicio es obligatoria."),
   endDate: z.string().min(1, "La fecha de término es obligatoria."),
@@ -52,11 +55,20 @@ const expenseSchema = z.object({
   campaignId: z.string().optional().or(z.literal("")),
   businessUnitId: z.string().min(1, "Debes elegir una unidad."),
   budgetId: z.string().optional().or(z.literal("")),
+  locationId: z.string().optional().or(z.literal("")),
+  axis: axisSchema,
   category: z.string().min(2, "La categoría es obligatoria."),
   amount: z.coerce.number().min(1, "El monto debe ser mayor a 0."),
   status: z.enum(["PLANNED", "COMMITTED", "PAID"]).default("PLANNED"),
   date: z.string().min(1, "La fecha es obligatoria."),
   vendorId: z.string().optional().or(z.literal("")),
+  notes: z.string().optional().or(z.literal("")),
+});
+
+const budgetMatrixSchema = z.object({
+  periodYear: z.coerce.number().min(2024, "El año es obligatorio."),
+  periodMonth: z.coerce.number().min(1).max(12),
+  amount: z.coerce.number().min(0, "El monto debe ser mayor o igual a 0."),
   notes: z.string().optional().or(z.literal("")),
 });
 
@@ -328,6 +340,7 @@ export async function createCampaignAction(formData: FormData) {
     campaignCode: formData.get("campaignCode"),
     businessUnitId: formData.get("businessUnitId"),
     objective: formData.get("objective") ?? "",
+    axis: formData.get("axis") ?? "",
     status: formData.get("status") ?? "DRAFT",
     startDate: formData.get("startDate"),
     endDate: formData.get("endDate"),
@@ -340,6 +353,7 @@ export async function createCampaignAction(formData: FormData) {
       campaignCode: payload.campaignCode,
       businessUnitId: payload.businessUnitId,
       objective: payload.objective || null,
+      axis: payload.axis || null,
       status: payload.status,
       startDate: new Date(payload.startDate),
       endDate: new Date(payload.endDate),
@@ -362,6 +376,7 @@ export async function updateCampaignAction(formData: FormData) {
     campaignCode: formData.get("campaignCode"),
     businessUnitId: formData.get("businessUnitId"),
     objective: formData.get("objective") ?? "",
+    axis: formData.get("axis") ?? "",
     status: formData.get("status") ?? "DRAFT",
     startDate: formData.get("startDate"),
     endDate: formData.get("endDate"),
@@ -378,6 +393,7 @@ export async function updateCampaignAction(formData: FormData) {
       name: payload.name,
       businessUnitId: payload.businessUnitId,
       objective: payload.objective || null,
+      axis: payload.axis || null,
       status: payload.status,
       startDate: new Date(payload.startDate),
       endDate: new Date(payload.endDate),
@@ -757,6 +773,8 @@ export async function createExpenseAction(formData: FormData) {
     campaignId: formData.get("campaignId") ?? "",
     businessUnitId: formData.get("businessUnitId"),
     budgetId: formData.get("budgetId") ?? "",
+    locationId: formData.get("locationId") ?? "",
+    axis: formData.get("axis") ?? "",
     category: formData.get("category"),
     amount: formData.get("amount"),
     status: formData.get("status") ?? "PLANNED",
@@ -770,6 +788,8 @@ export async function createExpenseAction(formData: FormData) {
       campaignId: payload.campaignId || null,
       businessUnitId: payload.businessUnitId,
       budgetId: payload.budgetId || null,
+      locationId: payload.locationId || null,
+      axis: payload.axis || null,
       category: payload.category,
       amount: payload.amount,
       status: payload.status,
@@ -805,6 +825,8 @@ export async function updateExpenseAction(formData: FormData) {
     campaignId: formData.get("campaignId") ?? current.campaignId ?? "",
     businessUnitId: formData.get("businessUnitId") ?? current.businessUnitId,
     budgetId: formData.get("budgetId") ?? current.budgetId ?? "",
+    locationId: formData.get("locationId") ?? current.locationId ?? "",
+    axis: formData.get("axis") ?? current.axis ?? "",
     category: formData.get("category") ?? current.category,
     amount: formData.get("amount") ?? current.amount,
     status: formData.get("status") ?? current.status,
@@ -819,6 +841,8 @@ export async function updateExpenseAction(formData: FormData) {
       campaignId: payload.campaignId || null,
       businessUnitId: payload.businessUnitId,
       budgetId: payload.budgetId || null,
+      locationId: payload.locationId || null,
+      axis: payload.axis || null,
       category: payload.category,
       amount: payload.amount,
       status: payload.status,
@@ -859,4 +883,82 @@ export async function deleteExpenseAction(formData: FormData) {
   }
 
   redirect(withParam(redirectTo || fallback, "success", "expense-deleted"));
+}
+
+// Matriz presupuestaria — pool general mes a mes (§ ver schema.prisma BudgetMatrixEntry).
+// Upsert por [periodYear, periodMonth]: reingresar el mismo mes actualiza el monto
+// en vez de duplicar la fila, ya que el flujo es "ir ingresando mes a mes".
+export async function createBudgetMatrixEntryAction(formData: FormData) {
+  await requireRole(["ADMIN", "MARKETING_MANAGER"]);
+
+  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
+
+  const payload = budgetMatrixSchema.parse({
+    periodYear: formData.get("periodYear"),
+    periodMonth: formData.get("periodMonth"),
+    amount: formData.get("amount"),
+    notes: formData.get("notes") ?? "",
+  });
+
+  await prisma.budgetMatrixEntry.upsert({
+    where: { periodYear_periodMonth: { periodYear: payload.periodYear, periodMonth: payload.periodMonth } },
+    create: {
+      periodYear: payload.periodYear,
+      periodMonth: payload.periodMonth,
+      amount: payload.amount,
+      notes: payload.notes || null,
+    },
+    update: {
+      amount: payload.amount,
+      notes: payload.notes || null,
+    },
+  });
+
+  revalidatePath("/budget");
+  revalidatePath("/dashboard");
+  redirect(withParam(redirectTo || "/budget", "success", "matrix-entry-saved"));
+}
+
+export async function updateBudgetMatrixEntryAction(formData: FormData) {
+  await requireRole(["ADMIN", "MARKETING_MANAGER"]);
+
+  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
+
+  const id = String(formData.get("id"));
+  const current = await prisma.budgetMatrixEntry.findUnique({ where: { id } });
+  if (!current) redirect(withParam(redirectTo || "/budget", "error", "matrix-entry-not-found"));
+
+  const payload = budgetMatrixSchema.parse({
+    periodYear: formData.get("periodYear") ?? current.periodYear,
+    periodMonth: formData.get("periodMonth") ?? current.periodMonth,
+    amount: formData.get("amount") ?? current.amount,
+    notes: formData.get("notes") ?? current.notes ?? "",
+  });
+
+  await prisma.budgetMatrixEntry.update({
+    where: { id },
+    data: {
+      periodYear: payload.periodYear,
+      periodMonth: payload.periodMonth,
+      amount: payload.amount,
+      notes: payload.notes || null,
+    },
+  });
+
+  revalidatePath("/budget");
+  revalidatePath("/dashboard");
+  redirect(withParam(redirectTo || "/budget", "success", "matrix-entry-updated"));
+}
+
+export async function deleteBudgetMatrixEntryAction(formData: FormData) {
+  await requireRole(["ADMIN", "MARKETING_MANAGER"]);
+
+  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
+
+  const id = String(formData.get("id"));
+  await prisma.budgetMatrixEntry.delete({ where: { id } });
+
+  revalidatePath("/budget");
+  revalidatePath("/dashboard");
+  redirect(withParam(redirectTo || "/budget", "success", "matrix-entry-deleted"));
 }
