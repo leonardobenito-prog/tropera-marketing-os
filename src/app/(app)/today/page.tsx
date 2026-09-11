@@ -19,6 +19,24 @@ const STATUS_TONE: Record<string, "neutral" | "warning" | "success" | "danger"> 
   DONE: "success",
 };
 
+const PROJECT_STATUS_LABEL: Record<string, string> = {
+  BACKLOG: "Backlog",
+  IN_PRODUCTION: "En producción",
+  REVIEW: "Revisión",
+  APPROVED: "Aprobado",
+  PUBLISHED: "Publicado",
+  IMPLEMENTED: "Implementado",
+};
+
+const PROJECT_STATUS_TONE: Record<string, "neutral" | "warning" | "success" | "danger"> = {
+  BACKLOG: "neutral",
+  IN_PRODUCTION: "warning",
+  REVIEW: "success",
+  APPROVED: "success",
+  PUBLISHED: "success",
+  IMPLEMENTED: "success",
+};
+
 const PRIORITY_LABEL: Record<string, string> = {
   LOW: "Baja",
   MEDIUM: "Media",
@@ -31,6 +49,24 @@ const PRIORITY_TONE: Record<string, "neutral" | "warning" | "danger"> = {
   HIGH: "danger",
 };
 
+type PendingItem = {
+  id: string;
+  kind: "Tarea" | "Producción";
+  title: string;
+  context: string;
+  statusLabel: string;
+  statusTone: "neutral" | "warning" | "success" | "danger";
+  dueDate: Date | null;
+  assigneeName: string;
+  meta: string;
+  priorityLabel?: string;
+  priorityTone?: "neutral" | "warning" | "danger";
+  costLabel?: string;
+  cost?: number | null;
+  done: boolean;
+  inProgress: boolean;
+};
+
 export default async function TodayPage({
   searchParams,
 }: {
@@ -39,18 +75,60 @@ export default async function TodayPage({
   const session = await requireSession();
   const currentUserId = String(session.user.id ?? "");
   const selectedAssigneeId = searchParams?.assignee || currentUserId;
+  const assigneeWhere = selectedAssigneeId && selectedAssigneeId !== "all" ? { assigneeId: selectedAssigneeId } : undefined;
 
-  const [users, tasks] = await Promise.all([
+  const [users, tasks, projects] = await Promise.all([
     prisma.user.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true, email: true },
     }),
     prisma.task.findMany({
-      where: selectedAssigneeId && selectedAssigneeId !== "all" ? { assigneeId: selectedAssigneeId } : undefined,
+      where: assigneeWhere,
       include: { assignee: true, campaign: true, productionProject: true },
       orderBy: { dueDate: "asc" },
     }),
+    prisma.productionProject.findMany({
+      where: assigneeWhere,
+      include: { assignee: true, campaign: true },
+      orderBy: { dueDate: "asc" },
+    }),
   ]);
+
+  const taskItems: PendingItem[] = tasks.map((task) => ({
+    id: `task-${task.id}`,
+    kind: "Tarea",
+    title: task.title,
+    context: task.campaign?.name ?? task.productionProject?.name ?? "Operativo",
+    statusLabel: STATUS_LABEL[task.status] ?? task.status,
+    statusTone: STATUS_TONE[task.status] ?? "neutral",
+    dueDate: task.dueDate,
+    assigneeName: task.assignee?.name ?? "Sin asignar",
+    meta: task.type ?? "Tarea",
+    priorityLabel: PRIORITY_LABEL[task.priority] ?? task.priority,
+    priorityTone: PRIORITY_TONE[task.priority] ?? "neutral",
+    costLabel: "Costo",
+    cost: task.cost,
+    done: task.status === "DONE",
+    inProgress: task.status === "IN_PROGRESS",
+  }));
+
+  const projectItems: PendingItem[] = projects.map((project) => ({
+    id: `project-${project.id}`,
+    kind: "Producción",
+    title: project.name,
+    context: project.campaign?.name ?? "Grilla RRSS",
+    statusLabel: PROJECT_STATUS_LABEL[project.status] ?? project.status,
+    statusTone: PROJECT_STATUS_TONE[project.status] ?? "neutral",
+    dueDate: project.dueDate,
+    assigneeName: project.assignee?.name ?? "Sin asignar",
+    meta: project.format,
+    costLabel: "Presupuesto",
+    cost: project.budgetAmount,
+    done: project.status === "IMPLEMENTED",
+    inProgress: project.status === "IN_PRODUCTION",
+  }));
+
+  const items = [...taskItems, ...projectItems];
 
   const now = new Date();
   const todayStart = new Date(now);
@@ -59,10 +137,10 @@ export default async function TodayPage({
   const todayEnd = new Date(now);
   todayEnd.setHours(23, 59, 59, 999);
 
-  const overdueTasks = tasks.filter((task) => task.dueDate && task.dueDate < todayStart && task.status !== "DONE");
-  const todayTasks = tasks.filter((task) => task.dueDate && task.dueDate >= todayStart && task.dueDate <= todayEnd && task.status !== "DONE");
-  const upcomingTasks = tasks.filter((task) => task.dueDate && task.dueDate > todayEnd && task.status !== "DONE");
-  const inProgressCount = tasks.filter((task) => task.status === "IN_PROGRESS").length;
+  const overdueItems = items.filter((item) => item.dueDate && item.dueDate < todayStart && !item.done);
+  const todayItems = items.filter((item) => item.dueDate && item.dueDate >= todayStart && item.dueDate <= todayEnd && !item.done);
+  const upcomingItems = items.filter((item) => item.dueDate && item.dueDate > todayEnd && !item.done);
+  const inProgressCount = items.filter((item) => item.inProgress).length;
 
   const selectedUser = users.find((user) => user.id === selectedAssigneeId) ?? null;
 
@@ -87,10 +165,10 @@ export default async function TodayPage({
       </div>
 
       <div className="flex gap-3 flex-wrap">
-        <KPICard label="ATRASADAS" value={overdueTasks.length} accent="var(--c-danger)" />
-        <KPICard label="HOY" value={todayTasks.length} accent="var(--c-warning)" />
+        <KPICard label="ATRASADAS" value={overdueItems.length} accent="var(--c-danger)" />
+        <KPICard label="HOY" value={todayItems.length} accent="var(--c-warning)" />
         <KPICard label="EN PROGRESO" value={inProgressCount} accent="var(--c-copper)" />
-        <KPICard label="PRÓXIMAS" value={upcomingTasks.length} accent="var(--c-forest)" />
+        <KPICard label="PRÓXIMAS" value={upcomingItems.length} accent="var(--c-forest)" />
       </div>
 
       <div className="rounded-lg p-4" style={{ background: "#F7F5F0", border: "1px solid var(--line)" }}>
@@ -105,42 +183,41 @@ export default async function TodayPage({
       <div className="grid gap-8 lg:grid-cols-2">
         <section>
           <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>
-            Tareas de hoy
+            Pendientes de hoy
           </h2>
 
-          {todayTasks.length === 0 ? (
+          {todayItems.length === 0 ? (
             <div className="text-sm px-4 py-3 rounded-lg" style={{ color: "var(--muted)", border: "1px dashed var(--line)" }}>
-              No hay tareas pendientes para hoy en esta vista.
+              No hay pendientes para hoy en esta vista.
             </div>
           ) : (
             <div className="space-y-3">
-              {todayTasks.map((task) => {
-                const context = task.campaign?.name ?? task.productionProject?.name ?? "Operativo";
-                return (
-                  <div key={task.id} className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-medium" style={{ color: "var(--ink)" }}>{task.title}</div>
-                        <div className="text-xs mt-1" style={{ color: "var(--muted)" }}>{context}</div>
-                      </div>
-                      <Badge tone={STATUS_TONE[task.status] ?? "neutral"}>{STATUS_LABEL[task.status] ?? task.status}</Badge>
+              {todayItems.map((item) => (
+                <div key={item.id} className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium" style={{ color: "var(--ink)" }}>{item.title}</div>
+                      <div className="text-xs mt-1" style={{ color: "var(--muted)" }}>{item.context}</div>
                     </div>
-
-                    <div className="mt-3 flex flex-wrap gap-2 text-xs" style={{ color: "var(--muted)" }}>
-                      <span>{task.assignee?.name ?? "Sin asignar"}</span>
-                      <span>•</span>
-                      <span>{task.type ?? "Tarea"}</span>
-                      <span>•</span>
-                      <span>{task.dueDate ? new Date(task.dueDate).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }) : "Sin hora"}</span>
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-between">
-                      <Badge tone={PRIORITY_TONE[task.priority] ?? "neutral"}>{PRIORITY_LABEL[task.priority] ?? task.priority}</Badge>
-                      {task.cost ? <span className="text-xs" style={{ color: "var(--muted)" }}>Costo: ${task.cost.toLocaleString("es-CL")}</span> : null}
-                    </div>
+                    <Badge tone={item.statusTone}>{item.statusLabel}</Badge>
                   </div>
-                );
-              })}
+
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs" style={{ color: "var(--muted)" }}>
+                    <span>{item.assigneeName}</span>
+                    <span>•</span>
+                    <span>{item.kind}</span>
+                    <span>•</span>
+                    <span>{item.meta}</span>
+                    <span>•</span>
+                    <span>{item.dueDate ? new Date(item.dueDate).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }) : "Sin hora"}</span>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between">
+                    {item.priorityLabel ? <Badge tone={item.priorityTone ?? "neutral"}>{item.priorityLabel}</Badge> : <span />}
+                    {item.cost ? <span className="text-xs" style={{ color: "var(--muted)" }}>{item.costLabel}: ${item.cost.toLocaleString("es-CL")}</span> : null}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </section>
@@ -150,29 +227,26 @@ export default async function TodayPage({
             Vencidas
           </h2>
 
-          {overdueTasks.length === 0 ? (
+          {overdueItems.length === 0 ? (
             <div className="text-sm px-4 py-3 rounded-lg" style={{ color: "var(--muted)", border: "1px dashed var(--line)" }}>
-              No hay tareas vencidas en esta vista.
+              No hay pendientes vencidos en esta vista.
             </div>
           ) : (
             <div className="space-y-3">
-              {overdueTasks.map((task) => {
-                const context = task.campaign?.name ?? task.productionProject?.name ?? "Operativo";
-                return (
-                  <div key={task.id} className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-medium" style={{ color: "var(--ink)" }}>{task.title}</div>
-                        <div className="text-xs mt-1" style={{ color: "var(--muted)" }}>{context}</div>
-                      </div>
-                      <Badge tone="danger">Vencida</Badge>
+              {overdueItems.map((item) => (
+                <div key={item.id} className="bg-white rounded-lg p-4" style={{ border: "1px solid var(--line)" }}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium" style={{ color: "var(--ink)" }}>{item.title}</div>
+                      <div className="text-xs mt-1" style={{ color: "var(--muted)" }}>{item.context} · {item.kind}</div>
                     </div>
-                    <div className="mt-3 text-xs" style={{ color: "var(--muted)" }}>
-                      {task.assignee?.name ?? "Sin asignar"} · Vence {task.dueDate ? new Date(task.dueDate).toLocaleDateString("es-CL") : "sin fecha"}
-                    </div>
+                    <Badge tone="danger">Vencida</Badge>
                   </div>
-                );
-              })}
+                  <div className="mt-3 text-xs" style={{ color: "var(--muted)" }}>
+                    {item.assigneeName} · Vence {item.dueDate ? new Date(item.dueDate).toLocaleDateString("es-CL") : "sin fecha"}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </section>
@@ -183,27 +257,29 @@ export default async function TodayPage({
           Próximas entregas
         </h2>
 
-        {upcomingTasks.length === 0 ? (
+        {upcomingItems.length === 0 ? (
           <div className="text-sm px-4 py-3 rounded-lg" style={{ color: "var(--muted)", border: "1px dashed var(--line)" }}>
             No hay entregas próximas para esta persona.
           </div>
         ) : (
           <div className="bg-white rounded-lg overflow-hidden" style={{ border: "1px solid var(--line)" }}>
-            <div className="grid text-[11px] px-4 py-2" style={{ gridTemplateColumns: "1.6fr 1fr 1fr 0.8fr", color: "var(--muted)", borderBottom: "1px solid var(--line)" }}>
-              <div>TAREA</div>
+            <div className="grid text-[11px] px-4 py-2" style={{ gridTemplateColumns: "1.4fr 0.7fr 1fr 1fr 0.8fr", color: "var(--muted)", borderBottom: "1px solid var(--line)" }}>
+              <div>ÍTEM</div>
+              <div>TIPO</div>
               <div>ASIGNADO</div>
               <div>FECHA</div>
               <div>ESTADO</div>
             </div>
-            {upcomingTasks.map((task) => (
-              <div key={task.id} className="grid items-center px-4 py-3 text-sm" style={{ gridTemplateColumns: "1.6fr 1fr 1fr 0.8fr", borderBottom: "1px solid var(--line)" }}>
+            {upcomingItems.map((item) => (
+              <div key={item.id} className="grid items-center px-4 py-3 text-sm" style={{ gridTemplateColumns: "1.4fr 0.7fr 1fr 1fr 0.8fr", borderBottom: "1px solid var(--line)" }}>
                 <div>
-                  <div style={{ color: "var(--ink)" }}>{task.title}</div>
-                  <div className="text-xs" style={{ color: "var(--muted)" }}>{task.campaign?.name ?? task.productionProject?.name ?? "Operativo"}</div>
+                  <div style={{ color: "var(--ink)" }}>{item.title}</div>
+                  <div className="text-xs" style={{ color: "var(--muted)" }}>{item.context}</div>
                 </div>
-                <div style={{ color: "var(--muted)" }}>{task.assignee?.name ?? "Sin asignar"}</div>
-                <div style={{ color: "var(--muted)" }}>{task.dueDate ? new Date(task.dueDate).toLocaleDateString("es-CL") : "Sin fecha"}</div>
-                <div><Badge tone={STATUS_TONE[task.status] ?? "neutral"}>{STATUS_LABEL[task.status] ?? task.status}</Badge></div>
+                <div style={{ color: "var(--muted)" }}>{item.kind}</div>
+                <div style={{ color: "var(--muted)" }}>{item.assigneeName}</div>
+                <div style={{ color: "var(--muted)" }}>{item.dueDate ? new Date(item.dueDate).toLocaleDateString("es-CL") : "Sin fecha"}</div>
+                <div><Badge tone={item.statusTone}>{item.statusLabel}</Badge></div>
               </div>
             ))}
           </div>

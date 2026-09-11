@@ -38,6 +38,38 @@ export function ProgressBar({ pct, color }: { pct: number; color: string }) {
   );
 }
 
+// Línea de tiempo de avance — usada por Producción para mostrar en qué etapa
+// del pipeline (BACKLOG -> ... -> IMPLEMENTED) está cada proyecto.
+export function StatusTimeline({ stages, currentIndex }: { stages: { key: string; label: string }[]; currentIndex: number }) {
+  return (
+    <div className="flex items-center w-full">
+      {stages.map((stage, i) => {
+        const done = i < currentIndex;
+        const active = i === currentIndex;
+        return (
+          <div key={stage.key} className="flex items-center" style={{ flex: i < stages.length - 1 ? 1 : "0 0 auto" }}>
+            <div className="flex flex-col items-center" style={{ minWidth: 56 }}>
+              <div
+                className="w-3 h-3 rounded-full flex-shrink-0"
+                style={{
+                  background: done || active ? "var(--c-forest)" : "#D8D5CC",
+                  boxShadow: active ? "0 0 0 3px rgba(46,112,89,0.2)" : "none",
+                }}
+              />
+              <div className="text-[10px] mt-1 text-center leading-tight" style={{ color: active ? "var(--ink)" : "var(--muted)", fontWeight: active ? 600 : 400 }}>
+                {stage.label}
+              </div>
+            </div>
+            {i < stages.length - 1 && (
+              <div className="flex-1 h-[2px] mx-1" style={{ background: done ? "var(--c-forest)" : "#D8D5CC" }} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function execState(assigned: number, actual: number, committed: number) {
   const pct = assigned > 0 ? (actual + committed) / assigned : 0;
   if (pct > 1) return { pct, color: "var(--c-danger)", label: "Excedido" };

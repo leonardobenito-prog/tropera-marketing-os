@@ -134,7 +134,7 @@ async function main() {
   });
 
   // --- Producción ---
-  const project1 = await prisma.productionProject.create({ data: { campaignId: camp1.id, name: "Producción Lanzamiento IPA", purpose: "CAMPAIGN", status: "IN_PRODUCTION" } });
+  const project1 = await prisma.productionProject.create({ data: { campaignId: camp1.id, name: "Producción Lanzamiento IPA", status: "IN_PRODUCTION" } });
   await prisma.task.createMany({
     data: [
       { productionProjectId: project1.id, campaignId: camp1.id, title: "Reel lanzamiento IPA", type: "Video", assigneeId: vale.id, dueDate: new Date("2026-09-10"), status: "IN_PROGRESS", priority: "HIGH", cost: 45000 },
@@ -142,7 +142,7 @@ async function main() {
     ],
   });
 
-  const project2 = await prisma.productionProject.create({ data: { campaignId: camp2.id, name: "Producción Fiestas Patrias", purpose: "CAMPAIGN", status: "IN_PRODUCTION" } });
+  const project2 = await prisma.productionProject.create({ data: { campaignId: camp2.id, name: "Producción Fiestas Patrias", status: "IN_PRODUCTION" } });
   await prisma.task.createMany({
     data: [
       { productionProjectId: project2.id, campaignId: camp2.id, title: "Set de posavasos", type: "Diseño", assigneeId: cote.id, dueDate: new Date("2026-09-06"), status: "DONE", priority: "HIGH", cost: 60000 },

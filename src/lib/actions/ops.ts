@@ -40,8 +40,13 @@ const taskSchema = z.object({
 const projectSchema = z.object({
   name: z.string().min(2, "El nombre del proyecto es obligatorio."),
   campaignId: z.string().optional().or(z.literal("")),
-  purpose: z.enum(["CAMPAIGN", "EVERGREEN", "BRAND"]).default("CAMPAIGN"),
+  format: z.string().min(1, "El formato es obligatorio.").default("Post"),
   status: z.enum(["BACKLOG", "IN_PRODUCTION", "REVIEW", "APPROVED", "PUBLISHED", "IMPLEMENTED"]).default("BACKLOG"),
+  assigneeId: z.string().optional().or(z.literal("")),
+  dueDate: z.string().optional().or(z.literal("")),
+  budgetAmount: z.coerce.number().min(0).optional().or(z.literal("")),
+  referenceUrl: z.string().optional().or(z.literal("")),
+  notes: z.string().optional().or(z.literal("")),
 });
 
 const budgetSchema = z.object({
@@ -580,21 +585,32 @@ export async function createProductionProjectAction(formData: FormData) {
   const payload = projectSchema.parse({
     name: formData.get("name"),
     campaignId: formData.get("campaignId") ?? "",
-    purpose: formData.get("purpose") ?? "CAMPAIGN",
+    format: formData.get("format") || "Post",
     status: formData.get("status") ?? "BACKLOG",
+    assigneeId: formData.get("assigneeId") ?? "",
+    dueDate: formData.get("dueDate") ?? "",
+    budgetAmount: formData.get("budgetAmount") ?? "",
+    referenceUrl: formData.get("referenceUrl") ?? "",
+    notes: formData.get("notes") ?? "",
   });
 
   const project = await prisma.productionProject.create({
     data: {
       name: payload.name,
       campaignId: payload.campaignId || null,
-      purpose: payload.purpose,
+      format: payload.format,
       status: payload.status,
+      assigneeId: payload.assigneeId || null,
+      dueDate: payload.dueDate ? new Date(payload.dueDate) : null,
+      budgetAmount: payload.budgetAmount === "" || payload.budgetAmount === undefined ? null : payload.budgetAmount,
+      referenceUrl: payload.referenceUrl || null,
+      notes: payload.notes || null,
     },
   });
 
   revalidatePath("/production");
   revalidatePath("/campaigns");
+  revalidatePath("/today");
 
   let fallback = "/production";
   if (project.campaignId) {
@@ -617,8 +633,13 @@ export async function updateProductionProjectAction(formData: FormData) {
   const payload = projectSchema.parse({
     name: formData.get("name"),
     campaignId: formData.get("campaignId") ?? current.campaignId ?? "",
-    purpose: formData.get("purpose") ?? current.purpose,
+    format: formData.get("format") || current.format,
     status: formData.get("status") ?? current.status,
+    assigneeId: formData.get("assigneeId") ?? current.assigneeId ?? "",
+    dueDate: formData.get("dueDate") ?? (current.dueDate ? current.dueDate.toISOString().slice(0, 10) : ""),
+    budgetAmount: formData.get("budgetAmount") ?? current.budgetAmount ?? "",
+    referenceUrl: formData.get("referenceUrl") ?? current.referenceUrl ?? "",
+    notes: formData.get("notes") ?? current.notes ?? "",
   });
 
   const updated = await prisma.productionProject.update({
@@ -626,13 +647,19 @@ export async function updateProductionProjectAction(formData: FormData) {
     data: {
       name: payload.name,
       campaignId: payload.campaignId || null,
-      purpose: payload.purpose,
+      format: payload.format,
       status: payload.status,
+      assigneeId: payload.assigneeId || null,
+      dueDate: payload.dueDate ? new Date(payload.dueDate) : null,
+      budgetAmount: payload.budgetAmount === "" || payload.budgetAmount === undefined ? null : payload.budgetAmount,
+      referenceUrl: payload.referenceUrl || null,
+      notes: payload.notes || null,
     },
   });
 
   revalidatePath("/production");
   revalidatePath("/campaigns");
+  revalidatePath("/today");
 
   let fallback = "/production";
   if (updated.campaignId) {
@@ -659,6 +686,7 @@ export async function deleteProductionProjectAction(formData: FormData) {
   ]);
 
   revalidatePath("/production");
+  revalidatePath("/today");
 
   let fallback = "/production";
   if (project.campaignId) {
