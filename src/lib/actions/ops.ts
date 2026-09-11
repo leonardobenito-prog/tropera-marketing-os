@@ -327,8 +327,10 @@ export async function deleteCampaignAction(formData: FormData) {
     prisma.budget.deleteMany({ where: { campaignId: id } }),
     prisma.metric.deleteMany({ where: { campaignId: id } }),
     prisma.learning.deleteMany({ where: { campaignId: id } }),
+    prisma.orderItem.deleteMany({ where: { order: { campaignId: id } } }),
     prisma.order.deleteMany({ where: { campaignId: id } }),
     prisma.physicalAdPlacement.deleteMany({ where: { campaignId: id } }),
+    prisma.adMetricRaw.deleteMany({ where: { digitalAdCampaign: { campaignId: id } } }),
     prisma.digitalAdCampaign.deleteMany({ where: { campaignId: id } }),
     prisma.asset.deleteMany({ where: { productionProject: { campaignId: id } } }),
     prisma.task.deleteMany({ where: { productionProject: { campaignId: id } } }),
@@ -632,7 +634,10 @@ export async function deleteBudgetAction(formData: FormData) {
   const budget = await prisma.budget.findUnique({ where: { id } });
   if (!budget) redirect(withParam(redirectTo || "/budget", "error", "budget-not-found"));
 
-  await prisma.budget.delete({ where: { id } });
+  await prisma.$transaction([
+    prisma.expense.updateMany({ where: { budgetId: id }, data: { budgetId: null } }),
+    prisma.budget.delete({ where: { id } }),
+  ]);
   revalidatePath("/budget");
   revalidatePath("/campaigns");
 
