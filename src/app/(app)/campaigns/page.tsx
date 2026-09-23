@@ -22,6 +22,32 @@ const MEDIA_TYPE_LABEL: Record<string, string> = { DIGITAL: "Digital", ANALOG: "
 const MEDIA_TYPE_TONE: Record<string, "forest" | "warning"> = { DIGITAL: "forest", ANALOG: "warning" };
 const MEDIA_TYPE_OPTIONS = ["DIGITAL", "ANALOG"] as const;
 
+const TASK_STATUS_LABEL: Record<string, string> = {
+  TODO: "Por hacer", IN_PROGRESS: "En progreso", REVIEW: "Revisión", DONE: "Hecho",
+};
+const TASK_STATUS_TONE: Record<string, "neutral" | "warning" | "success"> = {
+  TODO: "neutral", IN_PROGRESS: "warning", REVIEW: "success", DONE: "success",
+};
+
+const PRODUCTION_STATUS_LABEL: Record<string, string> = {
+  BACKLOG: "Backlog", IN_PRODUCTION: "En producción", REVIEW: "Revisión",
+  APPROVED: "Aprobado", PUBLISHED: "Publicado", IMPLEMENTED: "Implementado",
+};
+const PRODUCTION_STATUS_TONE: Record<string, "neutral" | "warning" | "success"> = {
+  BACKLOG: "neutral", IN_PRODUCTION: "warning", REVIEW: "success",
+  APPROVED: "success", PUBLISHED: "success", IMPLEMENTED: "success",
+};
+
+const NO_DATE_SORT_KEY = 8.64e15;
+
+function dueSortKey(date: Date | null) {
+  return date ? date.getTime() : NO_DATE_SORT_KEY;
+}
+
+function shortDate(date: Date | null) {
+  return date ? new Date(date).toLocaleDateString("es-CL") : "Sin fecha";
+}
+
 // Filtro por ventana de tiempo y tipo de medio vía querystring: /campaigns?from=2026-09-01&to=2026-09-30&mediaType=DIGITAL
 export default async function CampaignsPage({ searchParams }: { searchParams: { from?: string; to?: string; mediaType?: string } }) {
   const from = searchParams.from ? new Date(searchParams.from) : null;
@@ -37,7 +63,15 @@ export default async function CampaignsPage({ searchParams }: { searchParams: { 
   const [campaigns, businessUnits, users] = await Promise.all([
     prisma.campaign.findMany({
       where,
-      include: { businessUnit: true, budgets: true, expenses: true },
+      include: {
+        businessUnit: true,
+        budgets: true,
+        expenses: true,
+        tasks: { include: { assignee: true } },
+        productionProjects: {
+          include: { assignee: true, tasks: { include: { assignee: true } } },
+        },
+      },
       orderBy: { startDate: "desc" },
     }),
     prisma.businessUnit.findMany({ orderBy: { name: "asc" } }),
@@ -123,6 +157,18 @@ export default async function CampaignsPage({ searchParams }: { searchParams: { 
           const actual = c.expenses.filter((e) => e.status === "PAID").reduce((s, e) => s + e.amount, 0);
           const committed = c.expenses.filter((e) => e.status === "COMMITTED").reduce((s, e) => s + e.amount, 0);
           const ex = execState(assigned, actual, committed);
+
+          // Toda tarea de la campaña: la creada desde calendario (vínculo directo)
+          // más la de cada proyecto de producción asociado. Pendientes primero.
+          const linkedTasks = [
+            ...c.tasks.map((t) => ({ ...t, origin: "Calendario" })),
+            ...c.productionProjects.flatMap((p) => p.tasks.map((t) => ({ ...t, origin: `Producción · ${p.name}` }))),
+          ].sort((a, b) =>
+            Number(a.status === "DONE") - Number(b.status === "DONE") || dueSortKey(a.dueDate) - dueSortKey(b.dueDate)
+          );
+          const pendingCount = linkedTasks.filter((t) => t.status !== "DONE").length;
+          const projects = [...c.productionProjects].sort((a, b) => dueSortKey(a.dueDate) - dueSortKey(b.dueDate));
+
           return (
             <div key={c.id} className="px-4 py-3 text-sm" style={{ borderBottom: "1px solid var(--line)" }}>
               <div className="grid items-center gap-3" style={{ gridTemplateColumns: "1.3fr 1fr 0.8fr 0.8fr 1fr 1.3fr 0.8fr auto" }}>
@@ -218,6 +264,58 @@ export default async function CampaignsPage({ searchParams }: { searchParams: { 
                   <input type="number" name="assignedAmount" placeholder="Monto" min={0} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} required />
                   <button type="submit" className="px-2 py-1.5 rounded-md text-xs" style={{ background: "var(--c-forest)", color: "#fff" }}>+ Presupuesto</button>
                 </form>
+              </div>
+
+              <div className="mt-3 pt-3 grid gap-4 md:grid-cols-2" style={{ borderTop: "1px solid var(--line)" }}>
+                <div>
+                  <div className="text-[11px] uppercase mb-2" style={{ color: "var(--muted)" }}>
+                    Tareas de la campaña — {pendingCount} pendientes de {linkedTasks.length}
+                  </div>
+                  {linkedTasks.length === 0 ? (
+                    <div className="text-xs" style={{ color: "var(--muted)" }}>
+                      Sin tareas vinculadas. Se agregan desde Calendario o Producción eligiendo esta campaña.
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {linkedTasks.map((t) => (
+                        <div key={t.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5" style={{ background: "#F7F5F0" }}>
+                          <div className="min-w-0">
+                            <div className="text-xs truncate" style={{ color: "var(--ink)" }}>{t.title}</div>
+                            <div className="text-[10px] truncate" style={{ color: "var(--muted)" }}>
+                              {t.origin} · {shortDate(t.dueDate)} · {t.assignee?.name ?? "Sin asignar"}
+                            </div>
+                          </div>
+                          <Badge tone={TASK_STATUS_TONE[t.status] ?? "neutral"}>{TASK_STATUS_LABEL[t.status] ?? t.status}</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <div className="text-[11px] uppercase mb-2" style={{ color: "var(--muted)" }}>
+                    Proyectos de producción — {projects.length}
+                  </div>
+                  {projects.length === 0 ? (
+                    <div className="text-xs" style={{ color: "var(--muted)" }}>
+                      Sin proyectos vinculados. Se asocian desde Producción eligiendo esta campaña.
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {projects.map((p) => (
+                        <div key={p.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5" style={{ background: "#F7F5F0" }}>
+                          <div className="min-w-0">
+                            <div className="text-xs truncate" style={{ color: "var(--ink)" }}>{p.name}</div>
+                            <div className="text-[10px] truncate" style={{ color: "var(--muted)" }}>
+                              {p.format} · {shortDate(p.dueDate)} · {p.assignee?.name ?? "Sin asignar"} · {p.tasks.length} tareas
+                            </div>
+                          </div>
+                          <Badge tone={PRODUCTION_STATUS_TONE[p.status] ?? "neutral"}>{PRODUCTION_STATUS_LABEL[p.status] ?? p.status}</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           );
