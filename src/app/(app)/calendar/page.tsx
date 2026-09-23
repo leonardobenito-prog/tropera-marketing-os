@@ -36,13 +36,14 @@ export default async function CalendarPage({ searchParams }: { searchParams: { m
   const prevMonth = new Date(selectedYear, selectedMonthIndex - 1, 1);
   const nextMonth = new Date(selectedYear, selectedMonthIndex + 1, 1);
 
-  const [tasks, users] = await Promise.all([
+  const [tasks, users, campaigns] = await Promise.all([
     prisma.task.findMany({
       where: { dueDate: { gte: monthStart, lte: monthEnd } },
       include: { assignee: true, campaign: true, productionProject: true },
       orderBy: { dueDate: "asc" },
     }),
     prisma.user.findMany({ orderBy: { name: "asc" } }),
+    prisma.campaign.findMany({ orderBy: { name: "asc" } }),
   ]);
 
   const tasksByDate = new Map<string, typeof tasks>();
@@ -99,6 +100,10 @@ export default async function CalendarPage({ searchParams }: { searchParams: { m
             <option value="">Sin asignar</option>
             {users.map((user) => (<option key={user.id} value={user.id}>{user.name}</option>))}
           </select>
+          <select name="campaignId" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} defaultValue="">
+            <option value="">Sin campaña</option>
+            {campaigns.map((campaign) => (<option key={campaign.id} value={campaign.id}>{campaign.name}</option>))}
+          </select>
           <select name="status" className="px-3 py-2 rounded-md" style={{ border: "1px solid var(--line)" }} defaultValue="TODO">
             <option value="TODO">Por hacer</option>
             <option value="IN_PROGRESS">En progreso</option>
@@ -143,7 +148,9 @@ export default async function CalendarPage({ searchParams }: { searchParams: { m
                     {dayTasks.slice(0, 3).map((task) => (
                       <div key={task.id} className="rounded px-1.5 py-1 text-[10px]" style={{ background: "#F4F2ED", color: "var(--ink)" }}>
                         <div className="font-medium truncate">{task.title}</div>
-                        <div className="text-[9px]" style={{ color: "var(--muted)" }}>{task.assignee?.name ?? "Sin asignar"}</div>
+                        <div className="text-[9px] truncate" style={{ color: "var(--muted)" }}>
+                          {task.assignee?.name ?? "Sin asignar"}{task.campaign ? ` · ${task.campaign.name}` : ""}
+                        </div>
                       </div>
                     ))}
                     {dayTasks.length > 3 && (
@@ -157,6 +164,10 @@ export default async function CalendarPage({ searchParams }: { searchParams: { m
                       className="text-[10px] px-2 py-1 rounded-md w-full"
                       style={{ border: "1px solid var(--line)" }}
                     />
+                    <select name="campaignId" defaultValue="" className="text-[10px] px-2 py-1 rounded-md w-full" style={{ border: "1px solid var(--line)" }}>
+                      <option value="">Sin campaña</option>
+                      {campaigns.map((campaign) => (<option key={campaign.id} value={campaign.id}>{campaign.name}</option>))}
+                    </select>
                     <button type="submit" className="text-[10px] px-2 py-1 rounded-md w-full" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--ink)" }}>
                       + Tarea
                     </button>
@@ -187,8 +198,9 @@ export default async function CalendarPage({ searchParams }: { searchParams: { m
                     <div className="text-xs mt-1" style={{ color: "var(--muted)" }}>
                       {task.dueDate ? new Date(task.dueDate).toLocaleDateString("es-CL") : "Sin fecha"} · {task.assignee?.name ?? "Sin asignar"}
                     </div>
-                    <div className="mt-2 flex items-center gap-2">
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
                       <Badge tone={STATUS_TONE[task.status] ?? "neutral"}>{STATUS_LABEL[task.status] ?? task.status}</Badge>
+                      {task.campaign && <Badge tone="neutral">{task.campaign.name}</Badge>}
                     </div>
                     <form action={updateTaskAction} className="mt-2 grid gap-2">
                       <input type="hidden" name="id" value={task.id} />
@@ -209,6 +221,10 @@ export default async function CalendarPage({ searchParams }: { searchParams: { m
                       <select name="assigneeId" defaultValue={task.assigneeId ?? ""} className="px-2 py-1 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
                         <option value="">Sin asignar</option>
                         {users.map((user) => (<option key={user.id} value={user.id}>{user.name}</option>))}
+                      </select>
+                      <select name="campaignId" defaultValue={task.campaignId ?? ""} className="px-2 py-1 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
+                        <option value="">Sin campaña</option>
+                        {campaigns.map((campaign) => (<option key={campaign.id} value={campaign.id}>{campaign.name}</option>))}
                       </select>
                       <input type="number" name="cost" defaultValue={task.cost ?? ""} placeholder="Costo" min={0} className="px-2 py-1 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
                       <button type="submit" className="px-3 py-1.5 rounded-md text-[10px]" style={{ background: "var(--c-forest)", color: "#fff" }}>Guardar</button>

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { createProductionProjectAction, updateProductionProjectAction, deleteProductionProjectAction } from "@/lib/actions/ops";
+import { createProductionProjectAction, updateProductionProjectAction, deleteProductionProjectAction, createTaskAction, deleteTaskAction } from "@/lib/actions/ops";
 import { Badge, KPICard, StatusTimeline, money } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -165,20 +165,41 @@ export default async function ProductionPage() {
                 <div>
                   <div className="text-[11px] uppercase mb-2" style={{ color: "var(--muted)" }}>Tareas</div>
                   {project.tasks.length === 0 ? (
-                    <div className="text-sm" style={{ color: "var(--muted)" }}>Sin tareas asignadas.</div>
+                    <div className="text-sm mb-2" style={{ color: "var(--muted)" }}>Sin tareas asignadas.</div>
                   ) : (
-                    <div className="space-y-2">
-                      {project.tasks.slice(0, 4).map((task) => (
+                    <div className="space-y-2 mb-2">
+                      {project.tasks.map((task) => (
                         <div key={task.id} className="flex items-center justify-between gap-3 rounded-lg p-2" style={{ background: "#F7F5F0" }}>
                           <div>
                             <div className="text-sm" style={{ color: "var(--ink)" }}>{task.title}</div>
                             <div className="text-xs" style={{ color: "var(--muted)" }}>{task.assignee?.name ?? "Sin asignar"}</div>
                           </div>
-                          <Badge tone={TASK_STATUS_TONE[task.status] ?? "neutral"}>{TASK_STATUS_LABEL[task.status] ?? task.status}</Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge tone={TASK_STATUS_TONE[task.status] ?? "neutral"}>{TASK_STATUS_LABEL[task.status] ?? task.status}</Badge>
+                            <form action={deleteTaskAction} className="inline-block">
+                              <input type="hidden" name="id" value={task.id} />
+                              <input type="hidden" name="redirectTo" value="/production" />
+                              <button type="submit" className="text-[10px] px-1.5 py-0.5 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--c-danger)" }}>Borrar</button>
+                            </form>
+                          </div>
                         </div>
                       ))}
                     </div>
                   )}
+                  <form action={createTaskAction} className="grid gap-1.5">
+                    <input type="hidden" name="redirectTo" value="/production" />
+                    <input type="hidden" name="productionProjectId" value={project.id} />
+                    <input name="title" placeholder="Nueva tarea" className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} required />
+                    <select name="campaignId" defaultValue={project.campaignId ?? NO_CAMPAIGN_VALUE} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
+                      <option value={NO_CAMPAIGN_VALUE}>{NO_CAMPAIGN_LABEL}</option>
+                      {campaigns.map((campaign) => (<option key={campaign.id} value={campaign.id}>{campaign.name}</option>))}
+                    </select>
+                    <select name="assigneeId" className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
+                      <option value="">Sin asignar</option>
+                      {users.map((user) => (<option key={user.id} value={user.id}>{user.name}</option>))}
+                    </select>
+                    <button type="submit" className="px-3 py-1.5 rounded-md text-xs" style={{ background: "var(--c-forest)", color: "#fff" }}>+ Tarea</button>
+                  </form>
                 </div>
 
                 <div>

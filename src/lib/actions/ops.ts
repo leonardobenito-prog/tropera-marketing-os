@@ -421,6 +421,7 @@ export async function createTaskAction(formData: FormData) {
   revalidatePath("/today");
   revalidatePath("/calendar");
   revalidatePath("/campaigns");
+  revalidatePath("/production");
 
   let fallback = "/calendar";
   if (task.campaignId) {
@@ -471,6 +472,7 @@ export async function updateTaskAction(formData: FormData) {
   revalidatePath("/today");
   revalidatePath("/calendar");
   revalidatePath("/campaigns");
+  revalidatePath("/production");
 
   let fallback = "/calendar";
   if (updated.campaignId) {
@@ -495,6 +497,7 @@ export async function deleteTaskAction(formData: FormData) {
   revalidatePath("/today");
   revalidatePath("/calendar");
   revalidatePath("/campaigns");
+  revalidatePath("/production");
 
   let fallback = "/calendar";
   if (task.campaignId) {
