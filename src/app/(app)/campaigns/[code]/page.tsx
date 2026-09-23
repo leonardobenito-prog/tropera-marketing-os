@@ -1,9 +1,23 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { createTaskAction, createProductionProjectAction, updateTaskAction, deleteTaskAction, createBudgetAction, deleteBudgetAction } from "@/lib/actions/ops";
-import { KPICard, money, execState, ProgressBar } from "@/components/ui";
+import { Badge, KPICard, money, execState, ProgressBar } from "@/components/ui";
 
 const FORMAT_PRESETS = ["Post", "Video", "Reel", "Historia", "Gráfica", "POP", "Mailing"];
+
+const TASK_STATUS_LABEL: Record<string, string> = {
+  TODO: "Por hacer",
+  IN_PROGRESS: "En progreso",
+  REVIEW: "Revisión",
+  DONE: "Hecho",
+};
+
+const TASK_STATUS_TONE: Record<string, "neutral" | "warning" | "success"> = {
+  TODO: "neutral",
+  IN_PROGRESS: "warning",
+  REVIEW: "success",
+  DONE: "success",
+};
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +29,6 @@ export default async function CampaignDetailPage({ params }: { params: { code: s
         businessUnit: true,
         budgets: true,
         expenses: true,
-        tasks: { include: { assignee: true } },
-        productionProjects: true,
         learnings: true,
       },
     }),
@@ -24,6 +36,19 @@ export default async function CampaignDetailPage({ params }: { params: { code: s
   ]);
 
   if (!campaign) notFound();
+
+  // Una tarea pertenece a la campaña por vínculo directo (calendario) o a través
+  // del proyecto de producción al que está asociada.
+  const tasks = await prisma.task.findMany({
+    where: {
+      OR: [{ campaignId: campaign.id }, { productionProject: { campaignId: campaign.id } }],
+    },
+    include: { assignee: true, productionProject: true },
+    orderBy: { dueDate: "asc" },
+  });
+
+  const pendingTasks = tasks.filter((t) => t.status !== "DONE");
+  const doneTasks = tasks.filter((t) => t.status === "DONE");
 
   const assigned = campaign.budgets.reduce((s, b) => s + b.assignedAmount, 0);
   const actual = campaign.expenses.filter((e) => e.status === "PAID").reduce((s, e) => s + e.amount, 0);
@@ -152,20 +177,37 @@ export default async function CampaignDetailPage({ params }: { params: { code: s
       </div>
 
       <div>
-        <h2 className="text-lg heading-title mb-3" style={{ color: "var(--ink)" }}>Tareas</h2>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h2 className="text-lg heading-title" style={{ color: "var(--ink)" }}>Tareas</h2>
+          <span className="text-xs" style={{ color: "var(--muted)" }}>
+            {pendingTasks.length} pendientes · {doneTasks.length} completadas
+          </span>
+        </div>
         <div className="space-y-3">
-          {campaign.tasks.map((t) => (
+          {[...pendingTasks, ...doneTasks].map((t) => (
             <div key={t.id} className="px-4 py-3 bg-white rounded-lg text-sm" style={{ border: "1px solid var(--line)" }}>
               <div className="flex items-center justify-between gap-3">
-                <span>{t.title}</span>
-                <form action={deleteTaskAction} className="inline-block">
-                  <input type="hidden" name="id" value={t.id} />
-                  <button type="submit" className="text-[11px] px-2 py-1 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--c-danger)" }}>Borrar</button>
-                </form>
+                <div>
+                  <div style={{ color: "var(--ink)" }}>{t.title}</div>
+                  <div className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+                    {t.productionProject ? `Producción · ${t.productionProject.name}` : "Calendario"}
+                    {t.dueDate ? ` · ${new Date(t.dueDate).toLocaleDateString("es-CL")}` : ""}
+                    {` · ${t.assignee?.name ?? "Sin asignar"}`}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge tone={TASK_STATUS_TONE[t.status] ?? "neutral"}>{TASK_STATUS_LABEL[t.status] ?? t.status}</Badge>
+                  <form action={deleteTaskAction} className="inline-block">
+                    <input type="hidden" name="id" value={t.id} />
+                    <input type="hidden" name="redirectTo" value={`/campaigns/${campaign.campaignCode}`} />
+                    <button type="submit" className="text-[11px] px-2 py-1 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--c-danger)" }}>Borrar</button>
+                  </form>
+                </div>
               </div>
               <form action={updateTaskAction} className="mt-3 grid gap-2 md:grid-cols-5">
                 <input type="hidden" name="id" value={t.id} />
-                <input type="hidden" name="campaignId" value={campaign.id} />
+                <input type="hidden" name="campaignId" value={t.campaignId ?? ""} />
+                <input type="hidden" name="redirectTo" value={`/campaigns/${campaign.campaignCode}`} />
                 <input name="title" defaultValue={t.title} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} />
                 <select name="assigneeId" defaultValue={t.assigneeId ?? ""} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
                   <option value="">Sin asignar</option>
@@ -188,7 +230,7 @@ export default async function CampaignDetailPage({ params }: { params: { code: s
               </form>
             </div>
           ))}
-          {campaign.tasks.length === 0 && (
+          {tasks.length === 0 && (
             <div className="text-sm px-4 py-3 rounded-lg" style={{ color: "var(--muted)", border: "1px dashed var(--line)" }}>
               Sin tareas registradas.
             </div>

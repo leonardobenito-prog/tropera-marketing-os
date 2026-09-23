@@ -190,15 +190,14 @@ export default async function ProductionPage() {
                     <input type="hidden" name="redirectTo" value="/production" />
                     <input type="hidden" name="productionProjectId" value={project.id} />
                     <input name="title" placeholder="Nueva tarea" className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }} required />
-                    <select name="campaignId" defaultValue={project.campaignId ?? NO_CAMPAIGN_VALUE} className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
-                      <option value={NO_CAMPAIGN_VALUE}>{NO_CAMPAIGN_LABEL}</option>
-                      {campaigns.map((campaign) => (<option key={campaign.id} value={campaign.id}>{campaign.name}</option>))}
-                    </select>
                     <select name="assigneeId" className="px-2 py-1.5 rounded-md text-xs" style={{ border: "1px solid var(--line)" }}>
                       <option value="">Sin asignar</option>
                       {users.map((user) => (<option key={user.id} value={user.id}>{user.name}</option>))}
                     </select>
                     <button type="submit" className="px-3 py-1.5 rounded-md text-xs" style={{ background: "var(--c-forest)", color: "#fff" }}>+ Tarea</button>
+                    <div className="text-[10px]" style={{ color: "var(--muted)" }}>
+                      Se vincula a {project.campaign?.name ?? NO_CAMPAIGN_LABEL}
+                    </div>
                   </form>
                 </div>
 
