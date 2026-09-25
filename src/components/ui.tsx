@@ -70,6 +70,17 @@ export function StatusTimeline({ stages, currentIndex }: { stages: { key: string
   );
 }
 
+// Avance de trabajo de una campaña: cuánto de lo comprometido está terminado
+// (tareas en Hecho, proyectos de producción en Implementado). Sumar trabajo
+// nuevo baja el porcentaje a propósito — la barra mide lo cerrado sobre el total.
+export function workProgress(done: number, total: number) {
+  const pct = total > 0 ? done / total : 0;
+  if (total === 0) return { pct: 0, done, total, color: "var(--c-forest)", label: "Sin trabajo cargado" };
+  if (pct >= 1) return { pct, done, total, color: "var(--c-success)", label: "Completada" };
+  if (pct >= 0.5) return { pct, done, total, color: "var(--c-forest)", label: "En marcha" };
+  return { pct, done, total, color: "var(--c-warning)", label: "Iniciando" };
+}
+
 export function execState(assigned: number, actual: number, committed: number) {
   const pct = assigned > 0 ? (actual + committed) / assigned : 0;
   if (pct > 1) return { pct, color: "var(--c-danger)", label: "Excedido" };

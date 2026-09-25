@@ -1,9 +1,27 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { createTaskAction, createProductionProjectAction, updateTaskAction, deleteTaskAction, createBudgetAction, deleteBudgetAction } from "@/lib/actions/ops";
-import { Badge, KPICard, money, execState, ProgressBar } from "@/components/ui";
+import { Badge, KPICard, money, execState, workProgress, ProgressBar } from "@/components/ui";
 
 const FORMAT_PRESETS = ["Post", "Video", "Reel", "Historia", "Gráfica", "POP", "Mailing"];
+
+const PRODUCTION_STATUS_LABEL: Record<string, string> = {
+  BACKLOG: "Backlog",
+  IN_PRODUCTION: "En producción",
+  REVIEW: "Revisión",
+  APPROVED: "Aprobado",
+  PUBLISHED: "Publicado",
+  IMPLEMENTED: "Implementado",
+};
+
+const PRODUCTION_STATUS_TONE: Record<string, "neutral" | "warning" | "success"> = {
+  BACKLOG: "neutral",
+  IN_PRODUCTION: "warning",
+  REVIEW: "success",
+  APPROVED: "success",
+  PUBLISHED: "success",
+  IMPLEMENTED: "success",
+};
 
 const TASK_STATUS_LABEL: Record<string, string> = {
   TODO: "Por hacer",
@@ -30,6 +48,7 @@ export default async function CampaignDetailPage({ params }: { params: { code: s
         budgets: true,
         expenses: true,
         learnings: true,
+        productionProjects: { include: { assignee: true }, orderBy: { dueDate: "asc" } },
       },
     }),
     prisma.user.findMany({ orderBy: { name: "asc" } }),
@@ -50,6 +69,10 @@ export default async function CampaignDetailPage({ params }: { params: { code: s
   const pendingTasks = tasks.filter((t) => t.status !== "DONE");
   const doneTasks = tasks.filter((t) => t.status === "DONE");
 
+  const projects = campaign.productionProjects;
+  const doneProjects = projects.filter((p) => p.status === "IMPLEMENTED");
+  const progress = workProgress(doneTasks.length + doneProjects.length, tasks.length + projects.length);
+
   const assigned = campaign.budgets.reduce((s, b) => s + b.assignedAmount, 0);
   const actual = campaign.expenses.filter((e) => e.status === "PAID").reduce((s, e) => s + e.amount, 0);
   const committed = campaign.expenses.filter((e) => e.status === "COMMITTED").reduce((s, e) => s + e.amount, 0);
@@ -63,6 +86,19 @@ export default async function CampaignDetailPage({ params }: { params: { code: s
         <h1 className="text-xl heading-title" style={{ color: "var(--ink)" }}>{campaign.name}</h1>
         <div className="text-sm" style={{ color: "var(--muted)" }}>
           {campaign.businessUnit.name} · {campaign.startDate.toLocaleDateString("es-CL")} — {campaign.endDate.toLocaleDateString("es-CL")}
+        </div>
+
+        <div className="mt-4 max-w-xl">
+          <div className="flex items-center justify-between text-xs mb-1">
+            <span style={{ color: "var(--muted)" }}>
+              Avance — {progress.done} de {progress.total} listos ({Math.round(progress.pct * 100)}%)
+            </span>
+            <span style={{ color: progress.color }}>{progress.label}</span>
+          </div>
+          <ProgressBar pct={progress.pct} color={progress.color} />
+          <div className="text-[11px] mt-1" style={{ color: "var(--muted)" }}>
+            Cuenta tareas en Hecho y proyectos de producción en Implementado.
+          </div>
         </div>
       </div>
 
@@ -236,6 +272,37 @@ export default async function CampaignDetailPage({ params }: { params: { code: s
             </div>
           )}
         </div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h2 className="text-lg heading-title" style={{ color: "var(--ink)" }}>Proyectos de producción</h2>
+          <span className="text-xs" style={{ color: "var(--muted)" }}>
+            {doneProjects.length} de {projects.length} implementados
+          </span>
+        </div>
+        {projects.length === 0 ? (
+          <div className="text-sm px-4 py-3 rounded-lg" style={{ color: "var(--muted)", border: "1px dashed var(--line)" }}>
+            Sin proyectos vinculados. Se asocian desde Producción eligiendo esta campaña.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {projects.map((p) => (
+              <div key={p.id} className="px-4 py-3 bg-white rounded-lg flex items-center justify-between gap-3" style={{ border: "1px solid var(--line)" }}>
+                <div className="min-w-0">
+                  <div className="text-sm" style={{ color: "var(--ink)" }}>{p.name}</div>
+                  <div className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+                    {p.format}
+                    {` · ${p.dueDate ? new Date(p.dueDate).toLocaleDateString("es-CL") : "Sin fecha"}`}
+                    {` · ${p.assignee?.name ?? "Sin asignar"}`}
+                    {p.budgetAmount != null ? ` · ${money(p.budgetAmount)}` : ""}
+                  </div>
+                </div>
+                <Badge tone={PRODUCTION_STATUS_TONE[p.status] ?? "neutral"}>{PRODUCTION_STATUS_LABEL[p.status] ?? p.status}</Badge>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div>

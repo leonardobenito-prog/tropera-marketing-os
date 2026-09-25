@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { createCampaignAction, updateCampaignAction, deleteCampaignAction, createBudgetAction, deleteBudgetAction } from "@/lib/actions/ops";
-import { Badge, ProgressBar, execState, money } from "@/components/ui";
+import { Badge, ProgressBar, execState, workProgress, money } from "@/components/ui";
 import type { Prisma, CampaignMediaType, BudgetAxis } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -200,6 +200,11 @@ export default async function CampaignsPage({ searchParams }: { searchParams: { 
           );
           const pendingCount = linkedTasks.filter((t) => t.status !== "DONE").length;
           const projects = [...c.productionProjects].sort((a, b) => dueSortKey(a.dueDate) - dueSortKey(b.dueDate));
+          const doneProjects = projects.filter((p) => p.status === "IMPLEMENTED").length;
+          const progress = workProgress(
+            linkedTasks.length - pendingCount + doneProjects,
+            linkedTasks.length + projects.length
+          );
 
           return (
             <details key={c.id} className="text-sm" style={{ borderBottom: "1px solid var(--line)" }}>
@@ -214,6 +219,16 @@ export default async function CampaignsPage({ searchParams }: { searchParams: { 
               </summary>
 
               <div className="px-4 pb-4">
+                <div className="pb-3">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span style={{ color: "var(--muted)" }}>
+                      Avance — {progress.done} de {progress.total} listos ({Math.round(progress.pct * 100)}%)
+                    </span>
+                    <span style={{ color: progress.color }}>{progress.label}</span>
+                  </div>
+                  <ProgressBar pct={progress.pct} color={progress.color} />
+                </div>
+
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pb-3">
                   <span className="text-xs" style={{ color: "var(--muted)" }}>
                     Unidad: <span style={{ color: "var(--ink)" }}>{c.businessUnit.name}</span>
@@ -233,7 +248,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: { 
 
                 <div>
                   <div className="flex items-center justify-between text-xs mb-1">
-                    <span style={{ color: "var(--muted)" }}>Ejecución {Math.round(ex.pct * 100)}%</span>
+                    <span style={{ color: "var(--muted)" }}>Ejecución presupuestaria {Math.round(ex.pct * 100)}%</span>
                     <span style={{ color: ex.color }}>{ex.label}</span>
                   </div>
                   <ProgressBar pct={ex.pct} color={ex.color} />
