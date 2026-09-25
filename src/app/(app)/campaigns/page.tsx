@@ -49,7 +49,7 @@ function shortDate(date: Date | null) {
 }
 
 // Filtro por ventana de tiempo y tipo de medio vía querystring: /campaigns?from=2026-09-01&to=2026-09-30&mediaType=DIGITAL
-export default async function CampaignsPage({ searchParams }: { searchParams: { from?: string; to?: string; mediaType?: string } }) {
+export default async function CampaignsPage({ searchParams }: { searchParams: { from?: string; to?: string; mediaType?: string; error?: string; success?: string } }) {
   const from = searchParams.from ? new Date(searchParams.from) : null;
   const to = searchParams.to ? new Date(searchParams.to) : null;
   const mediaTypeFilter = MEDIA_TYPE_OPTIONS.includes(searchParams.mediaType as (typeof MEDIA_TYPE_OPTIONS)[number]) ? searchParams.mediaType : "";
@@ -83,6 +83,23 @@ export default async function CampaignsPage({ searchParams }: { searchParams: { 
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl heading-title" style={{ color: "var(--ink)" }}>Campañas</h1>
       </div>
+
+      {searchParams.error === "campaign-code-taken" && (
+        <div className="text-xs px-4 py-2 rounded-lg" style={{ background: "#FAE7E4", color: "#A23B2E" }}>
+          Ese código ya lo usa otra campaña. El código es único — elegí uno distinto y volvé a guardar.
+        </div>
+      )}
+      {searchParams.error === "campaign-invalid" && (
+        <div className="text-xs px-4 py-2 rounded-lg" style={{ background: "#FAE7E4", color: "#A23B2E" }}>
+          Faltan datos o son inválidos. El nombre y el código necesitan al menos 2 caracteres, y la unidad de negocio
+          y ambas fechas son obligatorias.
+        </div>
+      )}
+      {searchParams.success === "campaign-created" && (
+        <div className="text-xs px-4 py-2 rounded-lg" style={{ background: "#E7F1EA", color: "#2F6B45" }}>
+          Campaña creada correctamente.
+        </div>
+      )}
 
       <form className="flex items-center gap-2 text-xs flex-wrap" style={{ color: "var(--muted)" }}>
         Del <input type="date" name="from" defaultValue={searchParams.from ?? ""} className="px-2 py-1.5 rounded-md" style={{ border: "1px solid var(--line)" }} />

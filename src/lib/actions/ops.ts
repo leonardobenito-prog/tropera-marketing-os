@@ -248,7 +248,7 @@ export async function createCampaignAction(formData: FormData) {
 
   const redirectTo = String(formData.get("redirectTo") ?? "").trim();
 
-  const payload = campaignSchema.parse({
+  const parsed = campaignSchema.safeParse({
     name: formData.get("name"),
     campaignCode: formData.get("campaignCode"),
     businessUnitId: formData.get("businessUnitId"),
@@ -262,6 +262,16 @@ export async function createCampaignAction(formData: FormData) {
     periodYear: formData.get("periodYear") ?? "",
     assignedAmount: formData.get("assignedAmount") ?? "",
   });
+
+  if (!parsed.success) {
+    redirect(withParam(redirectTo || "/campaigns", "error", "campaign-invalid"));
+  }
+  const payload = parsed.data;
+
+  const codeTaken = await prisma.campaign.findUnique({ where: { campaignCode: payload.campaignCode } });
+  if (codeTaken) {
+    redirect(withParam(redirectTo || "/campaigns", "error", "campaign-code-taken"));
+  }
 
   const campaign = await prisma.campaign.create({
     data: {
