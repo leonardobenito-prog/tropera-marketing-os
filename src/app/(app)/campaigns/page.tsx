@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { createCampaignAction, updateCampaignAction, deleteCampaignAction, createBudgetAction, deleteBudgetAction } from "@/lib/actions/ops";
 import { Badge, ProgressBar, execState, money } from "@/components/ui";
-import type { Prisma, CampaignMediaType } from "@prisma/client";
+import type { Prisma, CampaignMediaType, BudgetAxis } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +17,7 @@ const STATUS_TONE: Record<string, "success" | "warning" | "neutral"> = {
 const AXIS_LABEL: Record<string, string> = {
   RECOGNITION: "Reconocimiento", PROMOTIONS: "Promociones", EVENTS: "Eventos", DELIVERY: "Delivery",
 };
+const AXIS_OPTIONS = ["RECOGNITION", "PROMOTIONS", "EVENTS", "DELIVERY"] as const;
 
 const MEDIA_TYPE_LABEL: Record<string, string> = { DIGITAL: "Digital", ANALOG: "Análoga" };
 const MEDIA_TYPE_TONE: Record<string, "forest" | "warning"> = { DIGITAL: "forest", ANALOG: "warning" };
@@ -49,15 +50,19 @@ function shortDate(date: Date | null) {
 }
 
 // Filtro por ventana de tiempo y tipo de medio vía querystring: /campaigns?from=2026-09-01&to=2026-09-30&mediaType=DIGITAL
-export default async function CampaignsPage({ searchParams }: { searchParams: { from?: string; to?: string; mediaType?: string; error?: string; success?: string } }) {
+export default async function CampaignsPage({ searchParams }: { searchParams: { from?: string; to?: string; mediaType?: string; businessUnitId?: string; axis?: string; error?: string; success?: string } }) {
   const from = searchParams.from ? new Date(searchParams.from) : null;
   const to = searchParams.to ? new Date(searchParams.to) : null;
   const mediaTypeFilter = MEDIA_TYPE_OPTIONS.includes(searchParams.mediaType as (typeof MEDIA_TYPE_OPTIONS)[number]) ? searchParams.mediaType : "";
+  const axisFilter = AXIS_OPTIONS.includes(searchParams.axis as (typeof AXIS_OPTIONS)[number]) ? searchParams.axis : "";
+  const businessUnitFilter = searchParams.businessUnitId ?? "";
 
   const where: Prisma.CampaignWhereInput = {
     ...(from ? { endDate: { gte: from } } : {}),
     ...(to ? { startDate: { lte: to } } : {}),
     ...(mediaTypeFilter ? { mediaType: mediaTypeFilter as CampaignMediaType } : {}),
+    ...(axisFilter ? { axis: axisFilter as BudgetAxis } : {}),
+    ...(businessUnitFilter ? { businessUnitId: businessUnitFilter } : {}),
   };
 
   const [campaigns, businessUnits, users] = await Promise.all([
@@ -104,13 +109,23 @@ export default async function CampaignsPage({ searchParams }: { searchParams: { 
       <form className="flex items-center gap-2 text-xs flex-wrap" style={{ color: "var(--muted)" }}>
         Del <input type="date" name="from" defaultValue={searchParams.from ?? ""} className="px-2 py-1.5 rounded-md" style={{ border: "1px solid var(--line)" }} />
         al <input type="date" name="to" defaultValue={searchParams.to ?? ""} className="px-2 py-1.5 rounded-md" style={{ border: "1px solid var(--line)" }} />
+        Unidad
+        <select name="businessUnitId" defaultValue={businessUnitFilter} className="px-2 py-1.5 rounded-md" style={{ border: "1px solid var(--line)" }}>
+          <option value="">Todas</option>
+          {businessUnits.map((unit) => (<option key={unit.id} value={unit.id}>{unit.name}</option>))}
+        </select>
+        Eje
+        <select name="axis" defaultValue={axisFilter} className="px-2 py-1.5 rounded-md" style={{ border: "1px solid var(--line)" }}>
+          <option value="">Todos</option>
+          {AXIS_OPTIONS.map((a) => (<option key={a} value={a}>{AXIS_LABEL[a]}</option>))}
+        </select>
         Tipo
         <select name="mediaType" defaultValue={mediaTypeFilter} className="px-2 py-1.5 rounded-md" style={{ border: "1px solid var(--line)" }}>
           <option value="">Todos</option>
           {MEDIA_TYPE_OPTIONS.map((m) => (<option key={m} value={m}>{MEDIA_TYPE_LABEL[m]}</option>))}
         </select>
         <button type="submit" className="px-3 py-1.5 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--ink)" }}>Filtrar</button>
-        {(searchParams.from || searchParams.to || mediaTypeFilter) && (
+        {(searchParams.from || searchParams.to || mediaTypeFilter || axisFilter || businessUnitFilter) && (
           <Link href="/campaigns" className="px-3 py-1.5 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--muted)" }}>Limpiar</Link>
         )}
       </form>
