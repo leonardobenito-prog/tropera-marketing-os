@@ -178,8 +178,8 @@ export default async function CampaignsPage({ searchParams }: { searchParams: { 
       </div>
 
       <div className="bg-white rounded-lg overflow-hidden" style={{ border: "1px solid var(--line)" }}>
-        <div className="grid text-[11px] px-4 py-2" style={{ gridTemplateColumns: "1.3fr 1fr 0.8fr 0.8fr 1fr 1.3fr 0.8fr", color: "var(--muted)", borderBottom: "1px solid var(--line)" }}>
-          <div>CAMPAÑA</div><div>UNIDAD</div><div>EJE</div><div>MEDIO</div><div>ESTADO</div><div>EJECUCIÓN</div><div>ID</div>
+        <div className="text-[11px] px-4 py-2" style={{ color: "var(--muted)", borderBottom: "1px solid var(--line)" }}>
+          CAMPAÑAS — TOCÁ UNA PARA VER SU DETALLE
         </div>
         {campaigns.length === 0 && (
           <div className="px-4 py-3 text-sm" style={{ color: "var(--muted)" }}>Sin campañas en este filtro.</div>
@@ -202,35 +202,42 @@ export default async function CampaignsPage({ searchParams }: { searchParams: { 
           const projects = [...c.productionProjects].sort((a, b) => dueSortKey(a.dueDate) - dueSortKey(b.dueDate));
 
           return (
-            <div key={c.id} className="px-4 py-3 text-sm" style={{ borderBottom: "1px solid var(--line)" }}>
-              <div className="grid items-center gap-3" style={{ gridTemplateColumns: "1.3fr 1fr 0.8fr 0.8fr 1fr 1.3fr 0.8fr auto" }}>
-                <Link href={`/campaigns/${c.campaignCode}`} className="contents">
-                  <div>
-                    <div style={{ color: "var(--ink)" }}>{c.name}</div>
-                    <div className="text-xs" style={{ color: "var(--muted)" }}>
-                      {c.startDate.toLocaleDateString("es-CL")} — {c.endDate.toLocaleDateString("es-CL")}
-                    </div>
+            <details key={c.id} className="text-sm" style={{ borderBottom: "1px solid var(--line)" }}>
+              <summary className="px-4 py-3 flex items-center justify-between gap-3 cursor-pointer">
+                <div>
+                  <div className="text-lg heading-title" style={{ color: "var(--ink)" }}>{c.name}</div>
+                  <div className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+                    {c.startDate.toLocaleDateString("es-CL")} — {c.endDate.toLocaleDateString("es-CL")}
                   </div>
-                  <div style={{ color: "var(--ink)" }}>{c.businessUnit.name}</div>
-                  <div className="text-xs" style={{ color: "var(--muted)" }}>{c.axis ? AXIS_LABEL[c.axis] : "—"}</div>
-                  <div>{c.mediaType ? <Badge tone={MEDIA_TYPE_TONE[c.mediaType]}>{MEDIA_TYPE_LABEL[c.mediaType]}</Badge> : <span className="text-xs" style={{ color: "var(--muted)" }}>—</span>}</div>
-                  <div><Badge tone={STATUS_TONE[c.status] || "neutral"}>{STATUS_LABEL[c.status] || c.status}</Badge></div>
-                  <div>
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span style={{ color: "var(--muted)" }}>{Math.round(ex.pct * 100)}%</span>
-                      <span style={{ color: ex.color }}>{ex.label}</span>
-                    </div>
-                    <ProgressBar pct={ex.pct} color={ex.color} />
-                  </div>
-                  <div className="text-xs" style={{ color: "var(--muted)", fontFamily: "monospace" }}>{c.campaignCode}</div>
-                </Link>
-                <div className="flex gap-2 justify-end">
-                  <form action={deleteCampaignAction} className="inline-block">
+                </div>
+                <span className="chevron text-xs" style={{ color: "var(--muted)", transition: "transform 150ms" }}>▼</span>
+              </summary>
+
+              <div className="px-4 pb-4">
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pb-3">
+                  <span className="text-xs" style={{ color: "var(--muted)" }}>
+                    Unidad: <span style={{ color: "var(--ink)" }}>{c.businessUnit.name}</span>
+                  </span>
+                  <span className="text-xs" style={{ color: "var(--muted)" }}>
+                    Eje: <span style={{ color: "var(--ink)" }}>{c.axis ? AXIS_LABEL[c.axis] : "—"}</span>
+                  </span>
+                  {c.mediaType && <Badge tone={MEDIA_TYPE_TONE[c.mediaType]}>{MEDIA_TYPE_LABEL[c.mediaType]}</Badge>}
+                  <Badge tone={STATUS_TONE[c.status] || "neutral"}>{STATUS_LABEL[c.status] || c.status}</Badge>
+                  <span className="text-xs" style={{ color: "var(--muted)", fontFamily: "monospace" }}>{c.campaignCode}</span>
+                  <Link href={`/campaigns/${c.campaignCode}`} className="text-xs" style={{ color: "var(--c-copper)" }}>Ver ficha completa →</Link>
+                  <form action={deleteCampaignAction} className="inline-block ml-auto">
                     <input type="hidden" name="id" value={c.id} />
                     <button type="submit" className="text-[11px] px-2 py-1 rounded-md" style={{ border: "1px solid var(--line)", background: "#fff", color: "var(--c-danger)" }}>Borrar</button>
                   </form>
                 </div>
-              </div>
+
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span style={{ color: "var(--muted)" }}>Ejecución {Math.round(ex.pct * 100)}%</span>
+                    <span style={{ color: ex.color }}>{ex.label}</span>
+                  </div>
+                  <ProgressBar pct={ex.pct} color={ex.color} />
+                </div>
 
               <form action={updateCampaignAction} className="mt-3 grid gap-2 md:grid-cols-4" style={{ borderTop: "1px solid var(--line)", paddingTop: "0.75rem" }}>
                 <input type="hidden" name="id" value={c.id} />
@@ -348,8 +355,9 @@ export default async function CampaignsPage({ searchParams }: { searchParams: { 
                     </div>
                   )}
                 </div>
+                </div>
               </div>
-            </div>
+            </details>
           );
         })}
       </div>

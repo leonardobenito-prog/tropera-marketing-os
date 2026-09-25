@@ -29,3 +29,14 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
+
+/* Filas desplegables (<details>): ocultamos el marcador nativo y usamos el chevron propio. */
+summary {
+  list-style: none;
+}
+summary::-webkit-details-marker {
+  display: none;
+}
+details[open] .chevron {
+  transform: rotate(180deg);
+}
